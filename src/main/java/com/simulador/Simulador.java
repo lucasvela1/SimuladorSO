@@ -54,8 +54,6 @@ public class Simulador {
         this.metricas = new Metricas();
         this.simulacionTerminada = false;
 
-        // Clonamos la lista de procesos para no modificar la original
-        this.procesos.forEach(p -> p.inicializarParaSimulacion(tiempoActual));
     }
 
     /**
@@ -99,7 +97,7 @@ public class Simulador {
     
     private void procesarLlegadas() {
         for (Proceso p : procesos) {
-            if (p.getTiempoArribo() == tiempoActual) {
+            if (p.getEstado().equals("NO_LLEGADO") && p.getTiempoArribo() <= tiempoActual) {
                 p.setEstado("NUEVO");
                 colaNuevos.add(p);
                 registrarEvento(p.getPid(), "ARRIBO_PROCESO", "El proceso " + p.getNombre() + " ha arribado.");
@@ -177,6 +175,7 @@ public class Simulador {
                 // Si aún le quedan ráfagas, se va a BLOQUEADO por E/S
                 actual.setEstado("BLOQUEADO");
                 actual.setTiempoRestanteES(actual.getDuracionRafagaES());
+                actual.setTiempoRestanteRafagaCPU(actual.getDuracionRafagaCPU());
                 colaBloqueados.add(actual);
                 registrarEvento(actual.getPid(), "EJECUCION_A_BLOQUEADO", "Proceso " + actual.getNombre() + " inicia E/S.");
                 cpu.liberar();

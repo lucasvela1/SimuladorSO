@@ -1,20 +1,61 @@
 package com.simulador.models;
 
+import com.google.gson.annotations.SerializedName;
+
 public class Proceso {
+    @SerializedName("nombre")
     private String nombre;
+
+    @SerializedName("tiempo_arribo")
     private int tiempoArribo;
+
+    @SerializedName("cantidad_rafagas_cpu")
     private int cantidadRafagasCPU;
+
+    @SerializedName("duracion_rafaga_cpu")
     private int duracionRafagaCPU;
+
+    @SerializedName("duracion_rafaga_es")
     private int duracionRafagaES; 
+
+    @SerializedName("prioridad_externa")
     private int prioridadExterna;
+    
+    // --- Atributos de estado (el simulador los maneja) ---
     private int rafagasRestantes;
     private int tiempoRestanteRafagaCPU;
     private int tiempoRestanteES;
-    private int pid; // Process ID
-    private String estado; //  "NUEVO", "LISTO", "EJECUCION", "BLOQUEADO", "TERMINADO"
+    private int pid;
+    private String estado;
     private int tiempoFinEjecucion;
     private int tiempoEnEstadoListo;
     private int tiempoRestanteTIP;
+
+    public Proceso() {
+        //Vacio para el Gson    
+    }
+
+    public Proceso(Proceso otro) {
+      // Copiamos los atributos de definición
+      this.nombre = otro.nombre;
+      this.tiempoArribo = otro.tiempoArribo;
+      this.cantidadRafagasCPU = otro.cantidadRafagasCPU;
+      this.duracionRafagaCPU = otro.duracionRafagaCPU;
+      this.duracionRafagaES = otro.duracionRafagaES;
+      this.prioridadExterna = otro.prioridadExterna;
+
+      // También copiamos los atributos de estado por si acaso, aunque se reinician
+      this.pid = otro.pid;
+      this.estado = otro.estado;
+      this.rafagasRestantes = otro.rafagasRestantes;
+      this.tiempoRestanteRafagaCPU = otro.tiempoRestanteRafagaCPU;
+      this.tiempoRestanteES = otro.tiempoRestanteES;
+      this.tiempoRestanteTIP = otro.tiempoRestanteTIP;
+    
+      // Y los de métricas
+      this.tiempoFinEjecucion = otro.tiempoFinEjecucion;
+      this.tiempoEnEstadoListo = otro.tiempoEnEstadoListo;
+    }
 
 
     public void inicializarParaSimulacion(int pid) {

@@ -18,10 +18,17 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.SwingWorker;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import com.simulador.Simulador;
+import com.simulador.models.Evento;
 import com.simulador.models.Proceso;
+import com.simulador.models.SystemParams;
+import com.simulador.scheduler.FCFS;
+import com.simulador.scheduler.Planificador;
+import com.simulador.scheduler.RoundRobin;
 
 public class VentanaPrincipal extends JFrame {
 
@@ -94,9 +101,50 @@ public class VentanaPrincipal extends JFrame {
         });
 
         iniciarButton.addActionListener(e -> {
-            // Aquí irá la lógica para crear y ejecutar el Simulador.java
-            logArea.append("\n--- INICIANDO SIMULACIÓN ---\n");
-            // Por ahora, solo es un marcador de posición.
+             try {
+                 // 1. Deshabilitar botones para no iniciar otra simulación mientras una corre
+                 iniciarButton.setEnabled(false);
+                // Dejamos habilitado el botón de cargar por si se quiere cambiar la tanda
+        
+                logArea.setText(""); // Limpiar el log anterior
+
+                 // 2. Recolectar los parámetros de la UI
+                 int tip = Integer.parseInt(tipField.getText());
+                 int tfp = Integer.parseInt(tfpField.getText());
+                 int tcp = Integer.parseInt(tcpField.getText());
+                 int quantum = Integer.parseInt(quantumField.getText());
+                 SystemParams params = new SystemParams(tip, tfp, tcp, quantum);
+
+                // 3. Crear el planificador seleccionado
+                String algoSeleccionado = (String) selectorAlgoritmo.getSelectedItem();
+                Planificador planificador = crearPlanificador(algoSeleccionado);
+                if (planificador == null) { // Por si acaso
+                   JOptionPane.showMessageDialog(this, "Algoritmo no implementado.", "Error", JOptionPane.ERROR_MESSAGE);
+                   iniciarButton.setEnabled(true);
+                   return;
+                }
+        
+                // 4. Crear el Simulador con una COPIA de los procesos cargados
+                // Esto permite volver a ejecutar la misma tanda sin tener que recargar el archivo
+                List<Proceso> copiaProcesos = procesosCargados.stream().map(Proceso::new).toList();
+                for (int i = 0; i < copiaProcesos.size(); i++) {
+                   copiaProcesos.get(i).inicializarParaSimulacion(i + 1);
+                }
+                Simulador simulador = new Simulador(copiaProcesos, planificador, params);
+        
+                // 5. Crear y ejecutar el SwingWorker
+                logArea.append("--- INICIANDO SIMULACIÓN [" + algoSeleccionado + "] ---\n");
+                SimulacionWorker worker = new SimulacionWorker(simulador);
+                worker.execute(); 
+
+            } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, "Por favor, ingrese valores numéricos válidos en los parámetros.", "Error de Entrada", JOptionPane.ERROR_MESSAGE);
+            iniciarButton.setEnabled(true);
+            } catch (Exception ex) {
+            ex.printStackTrace(); // Imprime el error en la consola para depuración
+            JOptionPane.showMessageDialog(this, "Ocurrió un error inesperado: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            iniciarButton.setEnabled(true);
+            }
         });
     }
 
@@ -122,8 +170,15 @@ public class VentanaPrincipal extends JFrame {
             logArea.setText("Archivo cargado: " + archivo.getName() + "\n");
             logArea.append(this.procesosCargados.size() + " procesos cargados exitosamente.\n");
             for (Proceso p : this.procesosCargados) {
-                logArea.append("  - PID: " + p.getPid() + ", Nombre: " + p.getNombre() + "\n");
+               logArea.append("----------------------------------------\n");
+               logArea.append("  PID: " + p.getPid() + " | Nombre: " + p.getNombre() + "\n");
+               logArea.append("    - Tiempo de Arribo: " + p.getTiempoArribo() + "\n");
+               logArea.append("    - Ráfagas de CPU: " + p.getCantidadRafagasCPU() + "\n");
+               logArea.append("    - Duración Ráfaga CPU: " + p.getDuracionRafagaCPU() + "\n");
+               logArea.append("    - Duración Ráfaga E/S: " + p.getDuracionRafagaES() + "\n");
+               logArea.append("    - Prioridad: " + p.getPrioridadExterna() + "\n");
             }
+            logArea.append("----------------------------------------\n");
             
             iniciarButton.setEnabled(true);
 
@@ -135,4 +190,41 @@ public class VentanaPrincipal extends JFrame {
             iniciarButton.setEnabled(false);
         }
     }
+
+    private Planificador crearPlanificador(String nombreAlgoritmo){
+        switch (nombreAlgoritmo) {
+            case "FCFS":
+                return new FCFS();
+            case "Round-Robin":
+                return new RoundRobin();
+            default:
+                return new FCFS(); // Por defecto    
+        }
+    }
+
+    private class SimulacionWorker extends SwingWorker<List<Evento>, Void> {
+
+        private Simulador simulador;
+        // No necesitas una referencia a logArea aquí, puedes usar la de la clase externa
+
+        public SimulacionWorker(Simulador simulador) {
+            this.simulador = simulador;
+        }
+
+        @Override
+        protected List<Evento> doInBackground() throws Exception {
+            simulador.iniciar();
+            return simulador.getLog();
+        }
+
+        @Override
+        protected void done() {
+            // ... lógica para actualizar la UI con los resultados ...
+            // Puedes acceder a logArea e iniciarButton directamente.
+            // Ejemplo:
+            // logArea.append("Simulación terminada.\n");
+            // iniciarButton.setEnabled(true);
+        }
+    }
 }
+

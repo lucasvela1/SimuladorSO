@@ -7,5 +7,9 @@ C:\Users\Lucas.Vela\Downloads\SimuladorSO\src\main\java\com\simulador\models\Pro
 C:\Users\Lucas.Vela\Downloads\SimuladorSO\src\main\java\com\simulador\models\SystemParams.java
 C:\Users\Lucas.Vela\Downloads\SimuladorSO\src\main\java\com\simulador\scheduler\FCFS.java
 C:\Users\Lucas.Vela\Downloads\SimuladorSO\src\main\java\com\simulador\scheduler\Planificador.java
+C:\Users\Lucas.Vela\Downloads\SimuladorSO\src\main\java\com\simulador\scheduler\PrioridadExterna.java
+C:\Users\Lucas.Vela\Downloads\SimuladorSO\src\main\java\com\simulador\scheduler\RoundRobin.java
+C:\Users\Lucas.Vela\Downloads\SimuladorSO\src\main\java\com\simulador\scheduler\SPN.java
+C:\Users\Lucas.Vela\Downloads\SimuladorSO\src\main\java\com\simulador\scheduler\SRTN.java
 C:\Users\Lucas.Vela\Downloads\SimuladorSO\src\main\java\com\simulador\Simulador.java
 C:\Users\Lucas.Vela\Downloads\SimuladorSO\src\main\java\com\simulador\ui\VentanaPrincipal.java
