@@ -1,0 +1,12 @@
+com\simulador\models\ColaListos.class
+com\simulador\models\Evento.class
+com\simulador\scheduler\Planificador.class
+com\simulador\Simulador.class
+com\simulador\models\EstadoCPU.class
+com\simulador\models\Metricas.class
+com\simulador\scheduler\FCFS.class
+com\simulador\models\Proceso.class
+com\simulador\ui\VentanaPrincipal$1.class
+com\simulador\main\Main.class
+com\simulador\ui\VentanaPrincipal.class
+com\simulador\models\SystemParams.class
