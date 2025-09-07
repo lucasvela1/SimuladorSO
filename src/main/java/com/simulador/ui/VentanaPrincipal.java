@@ -24,11 +24,15 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.simulador.Simulador;
 import com.simulador.models.Evento;
+import com.simulador.models.Metricas;
 import com.simulador.models.Proceso;
 import com.simulador.models.SystemParams;
 import com.simulador.scheduler.FCFS;
 import com.simulador.scheduler.Planificador;
 import com.simulador.scheduler.RoundRobin;
+import com.simulador.scheduler.SPN;
+import com.simulador.scheduler.SRTN;
+import com.simulador.scheduler.PrioridadExterna;
 
 public class VentanaPrincipal extends JFrame {
 
@@ -89,7 +93,6 @@ public class VentanaPrincipal extends JFrame {
         contentPane.add(panelBotones, BorderLayout.SOUTH);
 
         // --- LÓGICA DE LOS BOTONES ---
-
         cargarJsonButton.addActionListener(e -> {
             JFileChooser fileChooser = new JFileChooser();
             fileChooser.setDialogTitle("Selecciona el archivo JSON");
@@ -101,49 +104,45 @@ public class VentanaPrincipal extends JFrame {
         });
 
         iniciarButton.addActionListener(e -> {
-             try {
-                 // 1. Deshabilitar botones para no iniciar otra simulación mientras una corre
-                 iniciarButton.setEnabled(false);
-                // Dejamos habilitado el botón de cargar por si se quiere cambiar la tanda
-        
+            try {
+                iniciarButton.setEnabled(false);
                 logArea.setText(""); // Limpiar el log anterior
 
-                 // 2. Recolectar los parámetros de la UI
-                 int tip = Integer.parseInt(tipField.getText());
-                 int tfp = Integer.parseInt(tfpField.getText());
-                 int tcp = Integer.parseInt(tcpField.getText());
-                 int quantum = Integer.parseInt(quantumField.getText());
-                 SystemParams params = new SystemParams(tip, tfp, tcp, quantum);
+                // 1. Recolectar los parámetros de la UI
+                int tip = Integer.parseInt(tipField.getText());
+                int tfp = Integer.parseInt(tfpField.getText());
+                int tcp = Integer.parseInt(tcpField.getText());
+                int quantum = Integer.parseInt(quantumField.getText());
+                SystemParams params = new SystemParams(tip, tfp, tcp, quantum);
 
-                // 3. Crear el planificador seleccionado
+                // 2. Crear el planificador seleccionado
                 String algoSeleccionado = (String) selectorAlgoritmo.getSelectedItem();
                 Planificador planificador = crearPlanificador(algoSeleccionado);
-                if (planificador == null) { // Por si acaso
-                   JOptionPane.showMessageDialog(this, "Algoritmo no implementado.", "Error", JOptionPane.ERROR_MESSAGE);
-                   iniciarButton.setEnabled(true);
-                   return;
+                if (planificador == null) {
+                    JOptionPane.showMessageDialog(this, "Algoritmo no implementado.", "Error", JOptionPane.ERROR_MESSAGE);
+                    iniciarButton.setEnabled(true);
+                    return;
                 }
-        
-                // 4. Crear el Simulador con una COPIA de los procesos cargados
-                // Esto permite volver a ejecutar la misma tanda sin tener que recargar el archivo
+
+                // 3. Crear el Simulador con una COPIA de los procesos cargados
                 List<Proceso> copiaProcesos = procesosCargados.stream().map(Proceso::new).toList();
                 for (int i = 0; i < copiaProcesos.size(); i++) {
-                   copiaProcesos.get(i).inicializarParaSimulacion(i + 1);
+                    copiaProcesos.get(i).inicializarParaSimulacion(i + 1);
                 }
                 Simulador simulador = new Simulador(copiaProcesos, planificador, params);
-        
-                // 5. Crear y ejecutar el SwingWorker
+
+                // 4. Crear y ejecutar el SwingWorker
                 logArea.append("--- INICIANDO SIMULACIÓN [" + algoSeleccionado + "] ---\n");
                 SimulacionWorker worker = new SimulacionWorker(simulador);
-                worker.execute(); 
+                worker.execute();
 
             } catch (NumberFormatException ex) {
-            JOptionPane.showMessageDialog(this, "Por favor, ingrese valores numéricos válidos en los parámetros.", "Error de Entrada", JOptionPane.ERROR_MESSAGE);
-            iniciarButton.setEnabled(true);
+                JOptionPane.showMessageDialog(this, "Por favor, ingrese valores numéricos válidos en los parámetros.", "Error de Entrada", JOptionPane.ERROR_MESSAGE);
+                iniciarButton.setEnabled(true);
             } catch (Exception ex) {
-            ex.printStackTrace(); // Imprime el error en la consola para depuración
-            JOptionPane.showMessageDialog(this, "Ocurrió un error inesperado: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-            iniciarButton.setEnabled(true);
+                ex.printStackTrace();
+                JOptionPane.showMessageDialog(this, "Ocurrió un error inesperado: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                iniciarButton.setEnabled(true);
             }
         });
     }
@@ -151,7 +150,6 @@ public class VentanaPrincipal extends JFrame {
     private void cargarProcesosDesdeJSON(File archivo) {
         Gson gson = new Gson();
         java.lang.reflect.Type tipoListaProcesos = new TypeToken<List<Proceso>>() {}.getType();
-
 
         try (FileReader reader = new FileReader(archivo)) {
             this.procesosCargados = gson.fromJson(reader, tipoListaProcesos);
@@ -162,21 +160,20 @@ public class VentanaPrincipal extends JFrame {
                 return;
             }
 
-            // Asignar un PID único a cada proceso y prepararlo para la simulación
             for (int i = 0; i < this.procesosCargados.size(); i++) {
-                this.procesosCargados.get(i).inicializarParaSimulacion(i + 1); // Asigna PID 1, 2, 3...
+                this.procesosCargados.get(i).inicializarParaSimulacion(i + 1);
             }
 
             logArea.setText("Archivo cargado: " + archivo.getName() + "\n");
             logArea.append(this.procesosCargados.size() + " procesos cargados exitosamente.\n");
             for (Proceso p : this.procesosCargados) {
-               logArea.append("----------------------------------------\n");
-               logArea.append("  PID: " + p.getPid() + " | Nombre: " + p.getNombre() + "\n");
-               logArea.append("    - Tiempo de Arribo: " + p.getTiempoArribo() + "\n");
-               logArea.append("    - Ráfagas de CPU: " + p.getCantidadRafagasCPU() + "\n");
-               logArea.append("    - Duración Ráfaga CPU: " + p.getDuracionRafagaCPU() + "\n");
-               logArea.append("    - Duración Ráfaga E/S: " + p.getDuracionRafagaES() + "\n");
-               logArea.append("    - Prioridad: " + p.getPrioridadExterna() + "\n");
+                logArea.append("----------------------------------------\n");
+                logArea.append("  PID: " + p.getPid() + " | Nombre: " + p.getNombre() + "\n");
+                logArea.append("    - Tiempo de Arribo: " + p.getTiempoArribo() + "\n");
+                logArea.append("    - Ráfagas de CPU: " + p.getCantidadRafagasCPU() + "\n");
+                logArea.append("    - Duración Ráfaga CPU: " + p.getDuracionRafagaCPU() + "\n");
+                logArea.append("    - Duración Ráfaga E/S: " + p.getDuracionRafagaES() + "\n");
+                logArea.append("    - Prioridad: " + p.getPrioridadExterna() + "\n");
             }
             logArea.append("----------------------------------------\n");
             
@@ -197,15 +194,20 @@ public class VentanaPrincipal extends JFrame {
                 return new FCFS();
             case "Round-Robin":
                 return new RoundRobin();
+            case "Prioridad Externa":
+                return new PrioridadExterna();
+            case "SPN":
+                return new SPN();
+            case "SRTN":
+                return new SRTN();
             default:
-                return new FCFS(); // Por defecto    
+                return new FCFS();
         }
     }
 
     private class SimulacionWorker extends SwingWorker<List<Evento>, Void> {
 
         private Simulador simulador;
-        // No necesitas una referencia a logArea aquí, puedes usar la de la clase externa
 
         public SimulacionWorker(Simulador simulador) {
             this.simulador = simulador;
@@ -219,12 +221,27 @@ public class VentanaPrincipal extends JFrame {
 
         @Override
         protected void done() {
-            // ... lógica para actualizar la UI con los resultados ...
-            // Puedes acceder a logArea e iniciarButton directamente.
-            // Ejemplo:
-            // logArea.append("Simulación terminada.\n");
-            // iniciarButton.setEnabled(true);
+            try {
+                List<Evento> eventos = get();
+                for (Evento e : eventos) {
+                    logArea.append(e.toString() + "\n");
+                }
+
+                // Mostrar métricas finales
+                logArea.append("\n==== METRICAS ====\n");
+                Metricas m = simulador.getMetricas();
+                logArea.append("Tiempo Retorno Tanda: " + m.getTiempoRetornoTanda() + "\n");
+                logArea.append("Tiempo Medio Retorno: " + String.format("%.2f", m.getTiempoMedioRetornoTanda()) + "\n");
+                logArea.append("CPU Desocupada: " + m.getTiempoCPUDesocupada() + "\n");
+                logArea.append("CPU SO: " + m.getTiempoCPU_OS() + "\n");
+                int totalTiempo = eventos.get(eventos.size() - 1).getTiempo();
+                int cpuProc = totalTiempo - (m.getTiempoCPUDesocupada() + m.getTiempoCPU_OS());
+                logArea.append("CPU Procesos: " + cpuProc + "\n");
+
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+            iniciarButton.setEnabled(true);
         }
     }
 }
-
