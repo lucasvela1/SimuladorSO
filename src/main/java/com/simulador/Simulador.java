@@ -5,6 +5,7 @@ import java.util.List;
 
 import com.simulador.models.ColaListos;
 import com.simulador.models.ColaListosPrioridad;
+import com.simulador.models.ColaListosSPN;
 import com.simulador.models.ColaListosSRT;
 import com.simulador.models.EstadoCPU;
 import com.simulador.models.Evento;
@@ -14,6 +15,7 @@ import com.simulador.models.SystemParams;
 import com.simulador.scheduler.Planificador;
 import com.simulador.scheduler.PrioridadExterna;
 import com.simulador.scheduler.RoundRobin;
+import com.simulador.scheduler.SPN;
 import com.simulador.scheduler.SRTN;
 
 /**
@@ -52,6 +54,8 @@ public class Simulador {
             this.colaPrincipal = new ColaListosSRT();
         } else if (planificador instanceof PrioridadExterna) {
             this.colaPrincipal = new ColaListosPrioridad();
+        } else if (planificador instanceof SPN){
+            this.colaPrincipal = new ColaListosSPN();
         } else {
             // Para FCFS, RoundRobin, etc., usamos la cola FIFO por defecto.
             this.colaPrincipal = new ColaListos();

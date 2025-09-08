@@ -13,4 +13,5 @@ com\simulador\models\Metricas.class
 com\simulador\models\Proceso.class
 com\simulador\scheduler\RoundRobin.class
 com\simulador\models\ColaListosPrioridad.class
+com\simulador\models\ColaListosSPN.class
 com\simulador\main\Main.class
