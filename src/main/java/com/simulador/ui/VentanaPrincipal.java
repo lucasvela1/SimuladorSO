@@ -29,10 +29,10 @@ import com.simulador.models.Proceso;
 import com.simulador.models.SystemParams;
 import com.simulador.scheduler.FCFS;
 import com.simulador.scheduler.Planificador;
+import com.simulador.scheduler.PrioridadExterna;
 import com.simulador.scheduler.RoundRobin;
 import com.simulador.scheduler.SPN;
 import com.simulador.scheduler.SRTN;
-import com.simulador.scheduler.PrioridadExterna;
 
 public class VentanaPrincipal extends JFrame {
 
@@ -44,6 +44,7 @@ public class VentanaPrincipal extends JFrame {
 
     // Datos de la simulación
     private List<Proceso> procesosCargados;
+    private Simulador simulador; // Atributo para guardar la instancia del simulador
 
     public VentanaPrincipal() {
         setTitle("Simulador de Planificación de CPU");
@@ -53,10 +54,10 @@ public class VentanaPrincipal extends JFrame {
         
         // ---- Panel de Controles (Norte) ----
         JPanel panelControles = new JPanel();
-        String[] algoritmos = {"FCFS", "Prioridad Externa", "Round-Robin", "SPN", "SRTN"};
+        String[] algoritmos = {"FCFS", "SPN", "Prioridad Externa", "SRTN", "Round-Robin"};
         selectorAlgoritmo = new JComboBox<>(algoritmos);
-        tipField = new JTextField("5", 4);
-        tfpField = new JTextField("3", 4);
+        tipField = new JTextField("2", 4);
+        tfpField = new JTextField("1", 4);
         tcpField = new JTextField("1", 4);
         quantumField = new JTextField("10", 4);
         
@@ -124,16 +125,20 @@ public class VentanaPrincipal extends JFrame {
                     return;
                 }
 
-                // 3. Crear el Simulador con una COPIA de los procesos cargados
+                // 3. Crear el Simulador con una COPIA de los procesos cargados y guardarlo
                 List<Proceso> copiaProcesos = procesosCargados.stream().map(Proceso::new).toList();
+                
+                // Se reinicia el estado de cada proceso para una nueva simulación
                 for (int i = 0; i < copiaProcesos.size(); i++) {
                     copiaProcesos.get(i).inicializarParaSimulacion(i + 1);
                 }
-                Simulador simulador = new Simulador(copiaProcesos, planificador, params);
+                
+                // Guardamos la instancia del simulador en el atributo de la clase
+                this.simulador = new Simulador(copiaProcesos, planificador, params);
 
                 // 4. Crear y ejecutar el SwingWorker
                 logArea.append("--- INICIANDO SIMULACIÓN [" + algoSeleccionado + "] ---\n");
-                SimulacionWorker worker = new SimulacionWorker(simulador);
+                SimulacionWorker worker = new SimulacionWorker(this.simulador);
                 worker.execute();
 
             } catch (NumberFormatException ex) {
@@ -160,20 +165,16 @@ public class VentanaPrincipal extends JFrame {
                 return;
             }
 
-            for (int i = 0; i < this.procesosCargados.size(); i++) {
-                this.procesosCargados.get(i).inicializarParaSimulacion(i + 1);
-            }
-
             logArea.setText("Archivo cargado: " + archivo.getName() + "\n");
             logArea.append(this.procesosCargados.size() + " procesos cargados exitosamente.\n");
             for (Proceso p : this.procesosCargados) {
                 logArea.append("----------------------------------------\n");
-                logArea.append("  PID: " + p.getPid() + " | Nombre: " + p.getNombre() + "\n");
-                logArea.append("    - Tiempo de Arribo: " + p.getTiempoArribo() + "\n");
-                logArea.append("    - Ráfagas de CPU: " + p.getCantidadRafagasCPU() + "\n");
-                logArea.append("    - Duración Ráfaga CPU: " + p.getDuracionRafagaCPU() + "\n");
-                logArea.append("    - Duración Ráfaga E/S: " + p.getDuracionRafagaES() + "\n");
-                logArea.append("    - Prioridad: " + p.getPrioridadExterna() + "\n");
+                logArea.append("  Nombre: " + p.getNombre() + "\n");
+                logArea.append("   - Tiempo de Arribo: " + p.getTiempoArribo() + "\n");
+                logArea.append("   - Ráfagas de CPU: " + p.getCantidadRafagasCPU() + "\n");
+                logArea.append("   - Duración Ráfaga CPU: " + p.getDuracionRafagaCPU() + "\n");
+                logArea.append("   - Duración Ráfaga E/S: " + p.getDuracionRafagaES() + "\n");
+                logArea.append("   - Prioridad: " + p.getPrioridadExterna() + "\n");
             }
             logArea.append("----------------------------------------\n");
             
@@ -201,7 +202,7 @@ public class VentanaPrincipal extends JFrame {
             case "SRTN":
                 return new SRTN();
             default:
-                return new FCFS();
+                return null; // O devolver un FCFS por defecto
         }
     }
 
@@ -227,19 +228,38 @@ public class VentanaPrincipal extends JFrame {
                     logArea.append(e.toString() + "\n");
                 }
 
-                // Mostrar métricas finales
-                logArea.append("\n==== METRICAS ====\n");
-                Metricas m = simulador.getMetricas();
+                // Mostrar métricas de la tanda
+                logArea.append("\n==== METRICAS DE LA TANDA ====\n");
+                Metricas m = this.simulador.getMetricas();
                 logArea.append("Tiempo Retorno Tanda: " + m.getTiempoRetornoTanda() + "\n");
                 logArea.append("Tiempo Medio Retorno: " + String.format("%.2f", m.getTiempoMedioRetornoTanda()) + "\n");
                 logArea.append("CPU Desocupada: " + m.getTiempoCPUDesocupada() + "\n");
                 logArea.append("CPU SO: " + m.getTiempoCPU_OS() + "\n");
-                int totalTiempo = eventos.get(eventos.size() - 1).getTiempo();
+            
+                int totalTiempo = eventos.isEmpty() ? 0 : eventos.get(eventos.size() - 1).getTiempo(); 
                 int cpuProc = totalTiempo - (m.getTiempoCPUDesocupada() + m.getTiempoCPU_OS());
                 logArea.append("CPU Procesos: " + cpuProc + "\n");
 
+                // Mostrar métricas por proceso
+                logArea.append("\n==== METRICAS POR PROCESO ====\n");
+                List<Proceso> procesosFinalizados = this.simulador.getProcesos();
+                for (Proceso p : procesosFinalizados) {
+                    int tr = p.getTiempoFinEjecucion() - p.getTiempoArribo();
+                    double tiempoDeServicio = p.getCantidadRafagasCPU() * p.getDuracionRafagaCPU();
+                    double trn = (tiempoDeServicio > 0) ? tr / tiempoDeServicio : 0;
+                    
+                    logArea.append("Proceso " + p.getPid() + " (" + p.getNombre() + "):\n");
+                    logArea.append("  - Tiempo de Retorno (TRp): " + tr + "\n");
+                    logArea.append("  - T. de Retorno Normalizado (TRn): " + String.format("%.2f", trn) + "\n");
+                    logArea.append("  - Tiempo en Fila/Listo: " + p.getTiempoEnEstadoListo() + "\n");
+                }
+
             } catch (Exception ex) {
                 ex.printStackTrace();
+                JOptionPane.showMessageDialog(VentanaPrincipal.this, 
+                    "Ocurrió un error al finalizar la simulación: " + ex.getMessage(), 
+                    "Error", 
+                    JOptionPane.ERROR_MESSAGE);
             }
             iniciarButton.setEnabled(true);
         }

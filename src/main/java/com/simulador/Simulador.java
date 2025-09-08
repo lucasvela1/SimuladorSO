@@ -181,77 +181,80 @@ public class Simulador {
     }
 
     private void gestionarCPU() {
-      // ESTOS BLOQUES SON LOS CORRECTOS Y SUFICIENTES PARA CONTAR EL TIEMPO DE SO
-      if (cpu.getTiempoRestanteTIP() > 0) {
-          cpu.setTiempoRestanteTIP(cpu.getTiempoRestanteTIP() - 1);
-          metricas.incrementarTiempoCPU_OS(); // <-- Este conteo es correcto.
-          if (cpu.getTiempoRestanteTIP() == 0) {
-              Proceso p = cpu.getProcesoADespachar();
-              if (p != null) {
-                  registrarEvento(p.getPid(), "FIN_TIP", "Proceso " + p.getNombre() + " completó TIP.");
-                  p.setEstado("LISTO");
-                  despacharProceso(p);
+        if (cpu.getTiempoRestanteTIP() > 0) {
+            cpu.setTiempoRestanteTIP(cpu.getTiempoRestanteTIP() - 1);
+            metricas.incrementarTiempoCPU_OS();
+            if (cpu.getTiempoRestanteTIP() == 0) {
+                Proceso p = cpu.getProcesoADespachar();
+                if (p != null) {
+                    registrarEvento(p.getPid(), "FIN_TIP", "Proceso " + p.getNombre() + " completó TIP.");
+                    p.setEstado("LISTO");
+                    despacharProceso(p);
                 }
             }
             return; 
-       }
+        }
 
-       if (cpu.getTiempoRestanteTCP() > 0) {
-          cpu.setTiempoRestanteTCP(cpu.getTiempoRestanteTCP() - 1);
-          metricas.incrementarTiempoCPU_OS(); // <-- Este conteo es correcto.
-          if (cpu.getTiempoRestanteTCP() == 0) {
-             Proceso p = cpu.getProcesoADespachar();
-             if (p != null) {
-                  cpu.asignarProceso(p, params.getQuantum());
-                  registrarEvento(p.getPid(), "DESPACHO_PROCESO", "Proceso " + p.getNombre() + " pasa a ejecución.");
+        if (cpu.getTiempoRestanteTCP() > 0) {
+            cpu.setTiempoRestanteTCP(cpu.getTiempoRestanteTCP() - 1);
+            metricas.incrementarTiempoCPU_OS();
+            if (cpu.getTiempoRestanteTCP() == 0) {
+                Proceso p = cpu.getProcesoADespachar();
+                if (p != null) { // Si p no es nulo, fue un TCP.
+                    cpu.asignarProceso(p, params.getQuantum());
+                    registrarEvento(p.getPid(), "DESPACHO_PROCESO", "Proceso " + p.getNombre() + " pasa a ejecución.");
+                    return; // Fin del ciclo para evitar el "tick fantasma" en la ráfaga.
                 }
+                // Si p es nulo, fue un TFP. No hacemos return para que la CPU busque trabajo ahora.
+            } else {
+                // Si el TCP/TFP sigue en curso, sí hacemos return.
+                return;
             }
-            return;
         }
 
         if (!cpu.estaOciosa()) {
-          Proceso actual = cpu.getProcesoActual();
-          actual.setTiempoRestanteRafagaCPU(actual.getTiempoRestanteRafagaCPU() - 1);
-          cpu.setQuantumRestante(cpu.getQuantumRestante() - 1);
-          if (actual.getTiempoRestanteRafagaCPU() <= 0) {
-              actual.setRafagasRestantes(actual.getRafagasRestantes() - 1);
-              registrarEvento(actual.getPid(), "FIN_RAFAGA_CPU", "Proceso " + actual.getNombre() + " terminó ráfaga de CPU.");
-              if (actual.getRafagasRestantes() <= 0) {
-                  actual.setEstado("TERMINADO");
-                  actual.setTiempoFinEjecucion(tiempoActual);
-                  registrarEvento(actual.getPid(), "PROCESO_TERMINADO", "Proceso " + actual.getNombre() + " ha finalizado.");
-                  cpu.liberar();
-                  cpu.setTiempoRestanteTCP(params.getTfp());
-                  cpu.setProcesoADespachar(null);
+            Proceso actual = cpu.getProcesoActual();
+            actual.setTiempoRestanteRafagaCPU(actual.getTiempoRestanteRafagaCPU() - 1);
+            cpu.setQuantumRestante(cpu.getQuantumRestante() - 1);
+            if (actual.getTiempoRestanteRafagaCPU() <= 0) {
+                actual.setRafagasRestantes(actual.getRafagasRestantes() - 1);
+                registrarEvento(actual.getPid(), "FIN_RAFAGA_CPU", "Proceso " + actual.getNombre() + " terminó ráfaga de CPU.");
+                if (actual.getRafagasRestantes() <= 0) {
+                    actual.setEstado("TERMINADO");
+                    actual.setTiempoFinEjecucion(tiempoActual);
+                    registrarEvento(actual.getPid(), "PROCESO_TERMINADO", "Proceso " + actual.getNombre() + " ha finalizado.");
+                    cpu.liberar();
+                    cpu.setTiempoRestanteTCP(params.getTfp());
+                    cpu.setProcesoADespachar(null);
+                    return; // Iniciar el TFP consume el resto de este ciclo.
                 } else {
-                  actual.setEstado("BLOQUEADO");
-                  actual.setTiempoRestanteES(actual.getDuracionRafagaES());
-                  actual.setTiempoRestanteRafagaCPU(actual.getDuracionRafagaCPU());
-                  colaBloqueados.add(actual);
-                  registrarEvento(actual.getPid(), "EJECUCION_A_BLOQUEADO", "Proceso " + actual.getNombre() + " inicia E/S.");
-                  cpu.liberar();
+                    actual.setEstado("BLOQUEADO");
+                    actual.setTiempoRestanteES(actual.getDuracionRafagaES());
+                    actual.setTiempoRestanteRafagaCPU(actual.getDuracionRafagaCPU());
+                    colaBloqueados.add(actual);
+                    registrarEvento(actual.getPid(), "EJECUCION_A_BLOQUEADO", "Proceso " + actual.getNombre() + " inicia E/S.");
+                    cpu.liberar();
                 }
             } else if (cpu.getQuantumRestante() <= 0 && planificador instanceof RoundRobin) {
-              actual.setEstado("LISTO");
-              colaPrincipal.agregar(actual);
-              registrarEvento(actual.getPid(), "FIN_QUANTUM", "Proceso " + actual.getNombre() + " vuelve a la fila por fin de quantum.");
-              cpu.liberar();
+                actual.setEstado("LISTO");
+                colaPrincipal.agregar(actual);
+                registrarEvento(actual.getPid(), "FIN_QUANTUM", "Proceso " + actual.getNombre() + " vuelve a la fila por fin de quantum.");
+                cpu.liberar();
             }
         }
 
-
         if (cpu.estaOciosa()) {
-          Proceso proximo = colaPrincipal.quitar(); 
-          if (proximo != null) {
-              if (proximo.getEstado().equals("NUEVO")) {
-                  cpu.setProcesoADespachar(proximo);
-                  cpu.setTiempoRestanteTIP(params.getTip());
-                  registrarEvento(proximo.getPid(), "INICIO_TIP", "Proceso " + proximo.getNombre() + " es seleccionado para admisión (TIP).");
+            Proceso proximo = colaPrincipal.quitar(); 
+            if (proximo != null) {
+                if (proximo.getEstado().equals("NUEVO")) {
+                    cpu.setProcesoADespachar(proximo);
+                    cpu.setTiempoRestanteTIP(params.getTip());
+                    registrarEvento(proximo.getPid(), "INICIO_TIP", "Proceso " + proximo.getNombre() + " es seleccionado para admisión (TIP).");
                 } else { 
-                  despacharProceso(proximo);
+                    despacharProceso(proximo);
                 }
             } else {
-              metricas.incrementarTiempoCPUDesocupada();
+                metricas.incrementarTiempoCPUDesocupada();
             }
         }
     }
@@ -296,5 +299,8 @@ public class Simulador {
 
     public Metricas getMetricas() {
         return metricas;
+    }
+    public List<Proceso> getProcesos() {
+        return procesos;
     }
 }
