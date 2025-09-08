@@ -16,4 +16,9 @@ public class SRTN implements Planificador {
         
         return colaListos.quitar();
     }
+
+    @Override
+    public boolean esExpropiativo() {
+        return true; // SRTN es expropiativo
+    }
 }

@@ -16,4 +16,6 @@ public interface Planificador {
      * @return El proceso seleccionado, o null si no hay ninguno.
      */
     Proceso seleccionarSiguienteProceso(ColaListos colaListos, List<Proceso> procesos);
+
+    boolean esExpropiativo();
 }

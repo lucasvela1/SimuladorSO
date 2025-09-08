@@ -4,12 +4,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.simulador.models.ColaListos;
+import com.simulador.models.ColaListosPrioridad; // Importar
+import com.simulador.models.ColaListosSRT;      // Importar
 import com.simulador.models.EstadoCPU;
 import com.simulador.models.Evento;
 import com.simulador.models.Metricas;
 import com.simulador.models.Proceso;
 import com.simulador.models.SystemParams;
 import com.simulador.scheduler.Planificador;
+import com.simulador.scheduler.PrioridadExterna; // Importar
+import com.simulador.scheduler.RoundRobin;
+import com.simulador.scheduler.SRTN;              // Importar
 
 /**
  * El motor principal que ejecuta la simulación paso a paso.
@@ -19,21 +24,22 @@ public class Simulador {
 
     // --- Atributos del Estado de la Simulación ---
     private int tiempoActual;
-    private List<Proceso> procesos;           // Lista de todos los procesos definidos en la tanda
-    private SystemParams params;              // Parámetros del sistema (TIP, TFP, TCP, Quantum)
+    private List<Proceso> procesos;
+    private SystemParams params;
     
-    private Planificador planificador;        // Estrategia de planificación seleccionada
-    private EstadoCPU cpu;                    // Estado actual del procesador
-    private ColaListos colaPrincipal;         // Fila única de planificación, ordenada por orden de llegada (FIFO).
-    private List<Proceso> colaBloqueados;     // Cola de procesos bloqueados (esperando E/S)
+    private Planificador planificador;
+    private EstadoCPU cpu;
+    private ColaListos colaPrincipal;
+    private List<Proceso> colaBloqueados;
 
     // --- Resultados de la Simulación ---
-    private List<Evento> log;                 // Registro de eventos
-    private Metricas metricas;                // Métricas acumuladas
+    private List<Evento> log;
+    private Metricas metricas;
     private boolean simulacionTerminada;
 
     /**
      * Constructor para inicializar el simulador.
+     * Selecciona la implementación de cola correcta según la estrategia de planificación.
      */
     public Simulador(List<Proceso> procesos, Planificador planificador, SystemParams params) {
         this.tiempoActual = 0;
@@ -41,9 +47,19 @@ public class Simulador {
         this.planificador = planificador;
         this.params = params;
 
-        // Inicializar componentes internos
+        // --- Lógica de Selección de Cola ---
+        // Decide qué tipo de cola crear basado en la CLASE del planificador.
+        if (planificador instanceof SRTN) {
+            this.colaPrincipal = new ColaListosSRT();
+        } else if (planificador instanceof PrioridadExterna) {
+            this.colaPrincipal = new ColaListosPrioridad();
+        } else {
+            // Para FCFS, RoundRobin, etc., usamos la cola FIFO por defecto.
+            this.colaPrincipal = new ColaListos();
+        }
+        
+        // Inicializar el resto de componentes
         this.cpu = new EstadoCPU();
-        this.colaPrincipal = new ColaListos(); // Usa una cola FIFO (LinkedList)
         this.colaBloqueados = new ArrayList<>();
         this.log = new ArrayList<>();
         this.metricas = new Metricas();
@@ -55,26 +71,30 @@ public class Simulador {
      */
     public void iniciar() {
         registrarEvento(null, "INICIO_SIMULACION", "La simulación ha comenzado.");
-
         while (!simulacionTerminada) {
             ejecutarCiclo();
         }
-        
         int tiempoFinal = tiempoActual > 0 ? tiempoActual - 1 : 0;
         registrarEvento(null, "FIN_SIMULACION", "La simulación ha terminado en t=" + tiempoFinal);
-        calcularMetricasFinales();
+        calcularMetricasFinales(); 
     }
 
     /**
      * Ejecuta un ciclo (tick de reloj) de la simulación.
      */
     private void ejecutarCiclo() {
-        // 1. Actualizar procesos bloqueados (si terminan su E/S → se re-encolan en la fila principal)
+        // 1. Actualizar bloqueados. Si alguien se desbloquea, puede causar una interrupción.
         actualizarColaBloqueados();
-        
-        // 2. Procesar llegada de nuevos procesos (cuando arriban → se encolan en la fila principal)
+        if (planificador.esExpropiativo()) {
+            verificarInterrupcion();
+        }
+
+        // 2. Procesar llegadas. Si alguien llega, puede causar una interrupción.
         procesarLlegadas();
-        
+        if (planificador.esExpropiativo()) {
+            verificarInterrupcion();
+        }
+
         // 3. Gestionar la CPU
         gestionarCPU();
 
@@ -93,29 +113,59 @@ public class Simulador {
     }
 
     /**
-     * Marca los procesos que llegan al sistema y los encola en la fila principal.
+     * Maneja la lógica de interrupción (preemption) para planificadores expropiativos.
      */
+    private void verificarInterrupcion() {
+      // La condición base no cambia: solo se interrumpe un proceso de usuario.
+      if (!cpu.estaOciosa() && cpu.getTiempoRestanteTIP() == 0 && cpu.getTiempoRestanteTCP() == 0) {
+          Proceso actual = cpu.getProcesoActual();
+          Proceso proximoEnCola = null;
+          boolean debeInterrumpir = false;
+
+          // Comprobamos qué tipo de planificador estamos usando
+          if (planificador instanceof SRTN) {
+              proximoEnCola = ((ColaListosSRT) colaPrincipal).verSiguiente();
+              // Criterio de interrupción para SRTN: menor tiempo restante
+              if (proximoEnCola != null && proximoEnCola.getTiempoRestanteRafagaCPU() < actual.getTiempoRestanteRafagaCPU()) {
+                  debeInterrumpir = true;
+                }
+            } else if (planificador instanceof PrioridadExterna) {
+             proximoEnCola = ((ColaListosPrioridad) colaPrincipal).verSiguiente();
+              // Criterio de interrupción para Prioridad: mayor prioridad (menor número)
+              if (proximoEnCola != null && proximoEnCola.getPrioridadExterna() < actual.getPrioridadExterna()) {
+                debeInterrumpir = true;
+                }
+            }
+
+            // Si se cumple alguna de las condiciones de interrupción
+            if (debeInterrumpir) {
+              registrarEvento(actual.getPid(), "INTERRUPCION", "Proceso " + actual.getNombre() + " interrumpido por " + proximoEnCola.getNombre());
+            
+              actual.setEstado("LISTO");
+              colaPrincipal.agregar(actual); // Devolvemos el proceso actual a la cola.
+            
+              cpu.liberar(); // Liberamos la CPU para que se elija al nuevo proceso.
+            }
+        }
+    }
+
     private void procesarLlegadas() {
         for (Proceso p : procesos) {
             if (p.getEstado().equals("NO_LLEGADO") && p.getTiempoArribo() <= tiempoActual) {
                 p.setEstado("NUEVO");
-                colaPrincipal.agregar(p); // Se añade a la fila única.
+                colaPrincipal.agregar(p);
                 registrarEvento(p.getPid(), "ARRIBO_PROCESO", "El proceso " + p.getNombre() + " ha arribado y se encola.");
             }
         }
     }
 
-    /**
-     * Disminuye tiempos de E/S y mueve procesos a la fila principal cuando corresponde.
-     */
     private void actualizarColaBloqueados() {
         List<Proceso> desbloqueados = new ArrayList<>();
         for (Proceso p : colaBloqueados) {
             p.setTiempoRestanteES(p.getTiempoRestanteES() - 1);
-
             if (p.getTiempoRestanteES() <= 0) {
                 p.setEstado("LISTO"); 
-                colaPrincipal.agregar(p); // Se re-encola en la fila única, al final.
+                colaPrincipal.agregar(p);
                 desbloqueados.add(p);
                 registrarEvento(p.getPid(), "BLOQUEADO_A_LISTO", "Proceso " + p.getNombre() + " terminó E/S y se re-encola.");
             }
@@ -123,13 +173,7 @@ public class Simulador {
         colaBloqueados.removeAll(desbloqueados);
     }
 
-    /**
-     * Lógica central de gestión de la CPU con el modelo de Fila Única y ejecución post-TIP inmediata.
-     */
     private void gestionarCPU() {
-        // --- PARTE 1: GESTIONAR LA CPU SI ESTÁ OCUPADA ---
-
-        // Atendiendo TIP (Tiempo de Ingreso de Proceso)
         if (cpu.getTiempoRestanteTIP() > 0) {
             cpu.setTiempoRestanteTIP(cpu.getTiempoRestanteTIP() - 1);
             metricas.incrementarTiempoCPU_OS();
@@ -138,13 +182,12 @@ public class Simulador {
                 if (p != null) {
                     registrarEvento(p.getPid(), "FIN_TIP", "Proceso " + p.getNombre() + " completó TIP.");
                     p.setEstado("LISTO");
-                    despacharProceso(p); // Inmediatamente se despacha para ejecución (inicia TCP).
+                    despacharProceso(p);
                 }
             }
             return; 
         }
 
-        // Atendiendo TCP/TFP (Tiempo de Cambio de Proceso / Fin de Proceso)
         if (cpu.getTiempoRestanteTCP() > 0) {
             cpu.setTiempoRestanteTCP(cpu.getTiempoRestanteTCP() - 1);
             metricas.incrementarTiempoCPU_OS();
@@ -158,12 +201,10 @@ public class Simulador {
             return;
         }
 
-        // Ejecutando un proceso de usuario
         if (!cpu.estaOciosa()) {
             Proceso actual = cpu.getProcesoActual();
             actual.setTiempoRestanteRafagaCPU(actual.getTiempoRestanteRafagaCPU() - 1);
             cpu.setQuantumRestante(cpu.getQuantumRestante() - 1);
-
             if (actual.getTiempoRestanteRafagaCPU() <= 0) {
                 actual.setRafagasRestantes(actual.getRafagasRestantes() - 1);
                 registrarEvento(actual.getPid(), "FIN_RAFAGA_CPU", "Proceso " + actual.getNombre() + " terminó ráfaga de CPU.");
@@ -182,7 +223,7 @@ public class Simulador {
                     registrarEvento(actual.getPid(), "EJECUCION_A_BLOQUEADO", "Proceso " + actual.getNombre() + " inicia E/S.");
                     cpu.liberar();
                 }
-            } else if (cpu.getQuantumRestante() <= 0) {
+            } else if (cpu.getQuantumRestante() <= 0 && planificador instanceof RoundRobin) { // Asumiendo que existe RoundRobin
                 actual.setEstado("LISTO");
                 colaPrincipal.agregar(actual);
                 registrarEvento(actual.getPid(), "FIN_QUANTUM", "Proceso " + actual.getNombre() + " vuelve a la fila por fin de quantum.");
@@ -190,42 +231,30 @@ public class Simulador {
             }
         }
 
-        // --- PARTE 2: DECIDIR QUÉ HACER SI LA CPU ESTÁ LIBRE ---
         if (cpu.estaOciosa()) {
             Proceso proximo = colaPrincipal.quitar(); 
-
             if (proximo != null) {
                 if (proximo.getEstado().equals("NUEVO")) {
-                    // Si es NUEVO, necesita ser admitido (pagar TIP).
                     cpu.setProcesoADespachar(proximo);
                     cpu.setTiempoRestanteTIP(params.getTip());
                     registrarEvento(proximo.getPid(), "INICIO_TIP", "Proceso " + proximo.getNombre() + " es seleccionado para admisión (TIP).");
                     metricas.incrementarTiempoCPU_OS();
-                } else { // Si no es NUEVO, es LISTO.
-                    // Si está LISTO, necesita ejecutarse (pagar TCP).
+                } else { 
                     despacharProceso(proximo);
                     metricas.incrementarTiempoCPU_OS();
                 }
             } else {
-                // La fila principal está vacía, no hay nada que hacer.
                 metricas.incrementarTiempoCPUDesocupada();
             }
         }
     }
 
-    /**
-     * Inicia un cambio de contexto antes de ejecutar un proceso.
-     */
     private void despacharProceso(Proceso p) {
-        cpu.setProcesoADespachar(p); // Guardamos el proceso a despachar
-        cpu.setTiempoRestanteTCP(params.getTcp()); // Asignamos el tiempo de cambio de contexto
+        cpu.setProcesoADespachar(p);
+        cpu.setTiempoRestanteTCP(params.getTcp());
         registrarEvento(p.getPid(), "INICIO_TCP", "Iniciando cambio de contexto para " + p.getNombre());
     }
     
-    /**
-     * La simulación termina cuando todos los procesos han finalizado
-     * y no queda TIP/TCP en ejecución.
-     */
     private void verificarCondicionDeFin() {
         long procesosTerminados = procesos.stream().filter(p -> p.getEstado().equals("TERMINADO")).count();
         if (procesosTerminados == procesos.size() && cpu.estaOciosa() && cpu.getTiempoRestanteTCP() == 0 && cpu.getTiempoRestanteTIP() == 0) {
@@ -237,12 +266,6 @@ public class Simulador {
         this.log.add(new Evento(tiempoActual, pid, tipo, mensaje));
     }
 
-    /**
-     * Calcula las métricas finales de la simulación:
-     * - TRp, TRn y tiempo en listo por proceso.
-     * - TRt y TMRt de la tanda.
-     * - Uso de CPU (procesos, SO, desocupada).
-     */
     private void calcularMetricasFinales() {
         int sumaTR = 0;
         double sumaTRN = 0;

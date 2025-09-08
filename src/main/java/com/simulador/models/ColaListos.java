@@ -10,7 +10,7 @@ import java.util.Queue;
  */
 public class ColaListos {
 
-    private Queue<Proceso> cola;
+    public Queue<Proceso> cola;
 
     public ColaListos() {
         // Usamos LinkedList, que es una implementación de cola FIFO simple y perfecta.

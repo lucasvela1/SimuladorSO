@@ -9,11 +9,13 @@ public class PrioridadExterna implements Planificador {
 
     @Override
     public Proceso seleccionarSiguienteProceso(ColaListos colaListos, List<Proceso> procesos) {
-        //Round Robin toma el siguiente proceso siempre
-        if (colaListos.estaVacia()) {
-            return null;
-        }
-        
+        // La ColaListosPrioridad ya ordenó los procesos.
+        // Solo tenemos que quitar y devolver el de mayor prioridad.
         return colaListos.quitar();
+    }
+
+    @Override
+    public boolean esExpropiativo() {
+        return true;
     }
 }

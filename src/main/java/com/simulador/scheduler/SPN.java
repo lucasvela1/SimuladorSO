@@ -16,4 +16,8 @@ public class SPN implements Planificador {
         
         return colaListos.quitar();
     }
+    @Override
+    public boolean esExpropiativo() {
+        return false; // FCFS no es expropiativo
+    }
 }
