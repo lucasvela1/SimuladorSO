@@ -4,17 +4,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.simulador.models.ColaListos;
-import com.simulador.models.ColaListosPrioridad; // Importar
-import com.simulador.models.ColaListosSRT;      // Importar
+import com.simulador.models.ColaListosPrioridad;
+import com.simulador.models.ColaListosSRT;
 import com.simulador.models.EstadoCPU;
 import com.simulador.models.Evento;
 import com.simulador.models.Metricas;
 import com.simulador.models.Proceso;
 import com.simulador.models.SystemParams;
 import com.simulador.scheduler.Planificador;
-import com.simulador.scheduler.PrioridadExterna; // Importar
+import com.simulador.scheduler.PrioridadExterna;
 import com.simulador.scheduler.RoundRobin;
-import com.simulador.scheduler.SRTN;              // Importar
+import com.simulador.scheduler.SRTN;
 
 /**
  * El motor principal que ejecuta la simulación paso a paso.
@@ -47,7 +47,6 @@ public class Simulador {
         this.planificador = planificador;
         this.params = params;
 
-        // --- Lógica de Selección de Cola ---
         // Decide qué tipo de cola crear basado en la CLASE del planificador.
         if (planificador instanceof SRTN) {
             this.colaPrincipal = new ColaListosSRT();
@@ -113,38 +112,42 @@ public class Simulador {
     }
 
     /**
-     * Maneja la lógica de interrupción (preemption) para planificadores expropiativos.
+     * Maneja la lógica de interrupción (preemption) para planificadores expropiativos
+     * basados en comparación de procesos (SRT, Prioridad).
      */
     private void verificarInterrupcion() {
-      // La condición base no cambia: solo se interrumpe un proceso de usuario.
-      if (!cpu.estaOciosa() && cpu.getTiempoRestanteTIP() == 0 && cpu.getTiempoRestanteTCP() == 0) {
-          Proceso actual = cpu.getProcesoActual();
-          Proceso proximoEnCola = null;
-          boolean debeInterrumpir = false;
+        // Si el planificador es Round Robin, salimos. Su expropiación es por quantum, no por comparación.
+        if (planificador instanceof RoundRobin) {
+            return;
+        }
 
-          // Comprobamos qué tipo de planificador estamos usando
-          if (planificador instanceof SRTN) {
-              proximoEnCola = ((ColaListosSRT) colaPrincipal).verSiguiente();
-              // Criterio de interrupción para SRTN: menor tiempo restante
-              if (proximoEnCola != null && proximoEnCola.getTiempoRestanteRafagaCPU() < actual.getTiempoRestanteRafagaCPU()) {
-                  debeInterrumpir = true;
+        // Solo se interrumpe un proceso de usuario.
+        if (!cpu.estaOciosa() && cpu.getTiempoRestanteTIP() == 0 && cpu.getTiempoRestanteTCP() == 0) {
+            Proceso actual = cpu.getProcesoActual();
+            Proceso proximoEnCola = null;
+            boolean debeInterrumpir = false;
+
+            // Comprobamos qué tipo de planificador estamos usando para aplicar el criterio correcto
+            if (planificador instanceof SRTN) {
+                proximoEnCola = ((ColaListosSRT) colaPrincipal).verSiguiente();
+                // Criterio para SRTN: menor tiempo restante
+                if (proximoEnCola != null && proximoEnCola.getTiempoRestanteRafagaCPU() < actual.getTiempoRestanteRafagaCPU()) {
+                    debeInterrumpir = true;
                 }
             } else if (planificador instanceof PrioridadExterna) {
-             proximoEnCola = ((ColaListosPrioridad) colaPrincipal).verSiguiente();
-              // Criterio de interrupción para Prioridad: mayor prioridad (menor número)
-              if (proximoEnCola != null && proximoEnCola.getPrioridadExterna() < actual.getPrioridadExterna()) {
-                debeInterrumpir = true;
+                proximoEnCola = ((ColaListosPrioridad) colaPrincipal).verSiguiente();
+                // Criterio para Prioridad: mayor prioridad (menor número)
+                if (proximoEnCola != null && proximoEnCola.getPrioridadExterna() < actual.getPrioridadExterna()) {
+                    debeInterrumpir = true;
                 }
             }
 
             // Si se cumple alguna de las condiciones de interrupción
             if (debeInterrumpir) {
-              registrarEvento(actual.getPid(), "INTERRUPCION", "Proceso " + actual.getNombre() + " interrumpido por " + proximoEnCola.getNombre());
-            
-              actual.setEstado("LISTO");
-              colaPrincipal.agregar(actual); // Devolvemos el proceso actual a la cola.
-            
-              cpu.liberar(); // Liberamos la CPU para que se elija al nuevo proceso.
+                registrarEvento(actual.getPid(), "INTERRUPCION", "Proceso " + actual.getNombre() + " interrumpido por " + proximoEnCola.getNombre());
+                actual.setEstado("LISTO");
+                colaPrincipal.agregar(actual);
+                cpu.liberar();
             }
         }
     }
@@ -174,77 +177,77 @@ public class Simulador {
     }
 
     private void gestionarCPU() {
-        if (cpu.getTiempoRestanteTIP() > 0) {
-            cpu.setTiempoRestanteTIP(cpu.getTiempoRestanteTIP() - 1);
-            metricas.incrementarTiempoCPU_OS();
-            if (cpu.getTiempoRestanteTIP() == 0) {
-                Proceso p = cpu.getProcesoADespachar();
-                if (p != null) {
-                    registrarEvento(p.getPid(), "FIN_TIP", "Proceso " + p.getNombre() + " completó TIP.");
-                    p.setEstado("LISTO");
-                    despacharProceso(p);
+      // ESTOS BLOQUES SON LOS CORRECTOS Y SUFICIENTES PARA CONTAR EL TIEMPO DE SO
+      if (cpu.getTiempoRestanteTIP() > 0) {
+          cpu.setTiempoRestanteTIP(cpu.getTiempoRestanteTIP() - 1);
+          metricas.incrementarTiempoCPU_OS(); // <-- Este conteo es correcto.
+          if (cpu.getTiempoRestanteTIP() == 0) {
+              Proceso p = cpu.getProcesoADespachar();
+              if (p != null) {
+                  registrarEvento(p.getPid(), "FIN_TIP", "Proceso " + p.getNombre() + " completó TIP.");
+                  p.setEstado("LISTO");
+                  despacharProceso(p);
                 }
             }
             return; 
-        }
+       }
 
-        if (cpu.getTiempoRestanteTCP() > 0) {
-            cpu.setTiempoRestanteTCP(cpu.getTiempoRestanteTCP() - 1);
-            metricas.incrementarTiempoCPU_OS();
-            if (cpu.getTiempoRestanteTCP() == 0) {
-                Proceso p = cpu.getProcesoADespachar();
-                if (p != null) {
-                    cpu.asignarProceso(p, params.getQuantum());
-                    registrarEvento(p.getPid(), "DESPACHO_PROCESO", "Proceso " + p.getNombre() + " pasa a ejecución.");
+       if (cpu.getTiempoRestanteTCP() > 0) {
+          cpu.setTiempoRestanteTCP(cpu.getTiempoRestanteTCP() - 1);
+          metricas.incrementarTiempoCPU_OS(); // <-- Este conteo es correcto.
+          if (cpu.getTiempoRestanteTCP() == 0) {
+             Proceso p = cpu.getProcesoADespachar();
+             if (p != null) {
+                  cpu.asignarProceso(p, params.getQuantum());
+                  registrarEvento(p.getPid(), "DESPACHO_PROCESO", "Proceso " + p.getNombre() + " pasa a ejecución.");
                 }
             }
             return;
         }
 
         if (!cpu.estaOciosa()) {
-            Proceso actual = cpu.getProcesoActual();
-            actual.setTiempoRestanteRafagaCPU(actual.getTiempoRestanteRafagaCPU() - 1);
-            cpu.setQuantumRestante(cpu.getQuantumRestante() - 1);
-            if (actual.getTiempoRestanteRafagaCPU() <= 0) {
-                actual.setRafagasRestantes(actual.getRafagasRestantes() - 1);
-                registrarEvento(actual.getPid(), "FIN_RAFAGA_CPU", "Proceso " + actual.getNombre() + " terminó ráfaga de CPU.");
-                if (actual.getRafagasRestantes() <= 0) {
-                    actual.setEstado("TERMINADO");
-                    actual.setTiempoFinEjecucion(tiempoActual);
-                    registrarEvento(actual.getPid(), "PROCESO_TERMINADO", "Proceso " + actual.getNombre() + " ha finalizado.");
-                    cpu.liberar();
-                    cpu.setTiempoRestanteTCP(params.getTfp());
-                    cpu.setProcesoADespachar(null);
+          Proceso actual = cpu.getProcesoActual();
+          actual.setTiempoRestanteRafagaCPU(actual.getTiempoRestanteRafagaCPU() - 1);
+          cpu.setQuantumRestante(cpu.getQuantumRestante() - 1);
+          if (actual.getTiempoRestanteRafagaCPU() <= 0) {
+              actual.setRafagasRestantes(actual.getRafagasRestantes() - 1);
+              registrarEvento(actual.getPid(), "FIN_RAFAGA_CPU", "Proceso " + actual.getNombre() + " terminó ráfaga de CPU.");
+              if (actual.getRafagasRestantes() <= 0) {
+                  actual.setEstado("TERMINADO");
+                  actual.setTiempoFinEjecucion(tiempoActual);
+                  registrarEvento(actual.getPid(), "PROCESO_TERMINADO", "Proceso " + actual.getNombre() + " ha finalizado.");
+                  cpu.liberar();
+                  cpu.setTiempoRestanteTCP(params.getTfp());
+                  cpu.setProcesoADespachar(null);
                 } else {
-                    actual.setEstado("BLOQUEADO");
-                    actual.setTiempoRestanteES(actual.getDuracionRafagaES());
-                    actual.setTiempoRestanteRafagaCPU(actual.getDuracionRafagaCPU());
-                    colaBloqueados.add(actual);
-                    registrarEvento(actual.getPid(), "EJECUCION_A_BLOQUEADO", "Proceso " + actual.getNombre() + " inicia E/S.");
-                    cpu.liberar();
+                  actual.setEstado("BLOQUEADO");
+                  actual.setTiempoRestanteES(actual.getDuracionRafagaES());
+                  actual.setTiempoRestanteRafagaCPU(actual.getDuracionRafagaCPU());
+                  colaBloqueados.add(actual);
+                  registrarEvento(actual.getPid(), "EJECUCION_A_BLOQUEADO", "Proceso " + actual.getNombre() + " inicia E/S.");
+                  cpu.liberar();
                 }
-            } else if (cpu.getQuantumRestante() <= 0 && planificador instanceof RoundRobin) { // Asumiendo que existe RoundRobin
-                actual.setEstado("LISTO");
-                colaPrincipal.agregar(actual);
-                registrarEvento(actual.getPid(), "FIN_QUANTUM", "Proceso " + actual.getNombre() + " vuelve a la fila por fin de quantum.");
-                cpu.liberar();
+            } else if (cpu.getQuantumRestante() <= 0 && planificador instanceof RoundRobin) {
+              actual.setEstado("LISTO");
+              colaPrincipal.agregar(actual);
+              registrarEvento(actual.getPid(), "FIN_QUANTUM", "Proceso " + actual.getNombre() + " vuelve a la fila por fin de quantum.");
+              cpu.liberar();
             }
         }
 
+
         if (cpu.estaOciosa()) {
-            Proceso proximo = colaPrincipal.quitar(); 
-            if (proximo != null) {
-                if (proximo.getEstado().equals("NUEVO")) {
-                    cpu.setProcesoADespachar(proximo);
-                    cpu.setTiempoRestanteTIP(params.getTip());
-                    registrarEvento(proximo.getPid(), "INICIO_TIP", "Proceso " + proximo.getNombre() + " es seleccionado para admisión (TIP).");
-                    metricas.incrementarTiempoCPU_OS();
+          Proceso proximo = colaPrincipal.quitar(); 
+          if (proximo != null) {
+              if (proximo.getEstado().equals("NUEVO")) {
+                  cpu.setProcesoADespachar(proximo);
+                  cpu.setTiempoRestanteTIP(params.getTip());
+                  registrarEvento(proximo.getPid(), "INICIO_TIP", "Proceso " + proximo.getNombre() + " es seleccionado para admisión (TIP).");
                 } else { 
-                    despacharProceso(proximo);
-                    metricas.incrementarTiempoCPU_OS();
+                  despacharProceso(proximo);
                 }
             } else {
-                metricas.incrementarTiempoCPUDesocupada();
+              metricas.incrementarTiempoCPUDesocupada();
             }
         }
     }
@@ -268,20 +271,10 @@ public class Simulador {
 
     private void calcularMetricasFinales() {
         int sumaTR = 0;
-        double sumaTRN = 0;
-
+        
         for (Proceso p : procesos) {
             int tr = p.getTiempoFinEjecucion() - p.getTiempoArribo();
-            double trn = (p.getCantidadRafagasCPU() * p.getDuracionRafagaCPU() > 0) ?
-                         (double) tr / (p.getCantidadRafagasCPU() * p.getDuracionRafagaCPU()) : 0;
-
             sumaTR += tr;
-            sumaTRN += trn;
-
-            System.out.println("Proceso " + p.getPid() + " (" + p.getNombre() + "):");
-            System.out.println("  TRp = " + tr);
-            System.out.println("  TRn = " + String.format("%.2f", trn));
-            System.out.println("  Tiempo en Fila = " + p.getTiempoEnEstadoListo());
         }
 
         int trt = procesos.stream().mapToInt(Proceso::getTiempoFinEjecucion).max().orElse(0)
@@ -290,25 +283,6 @@ public class Simulador {
 
         metricas.setTiempoRetornoTanda(trt);
         metricas.setTiempoMedioRetornoTanda(tmrt);
-
-        System.out.println("\n==== METRICAS DE LA TANDA ====");
-        System.out.println("TRt = " + trt);
-        System.out.println("TMRt = " + String.format("%.2f", tmrt));
-
-        System.out.println("\n==== USO DE CPU ====");
-        int totalTiempo = tiempoActual > 0 ? tiempoActual - 1 : 0;
-        int cpuProc = totalTiempo - (metricas.getTiempoCPUDesocupada() + metricas.getTiempoCPU_OS());
-        System.out.println("Tiempo Total = " + totalTiempo);
-        System.out.println("CPU Desocupada = " + metricas.getTiempoCPUDesocupada());
-        System.out.println("CPU SO = " + metricas.getTiempoCPU_OS());
-        System.out.println("CPU Procesos = " + cpuProc);
-        
-        if (totalTiempo > 0) {
-            System.out.println("Porcentajes: Desocupada=" 
-                + String.format("%.2f", (100.0 * metricas.getTiempoCPUDesocupada() / totalTiempo)) + "%, SO=" 
-                + String.format("%.2f", (100.0 * metricas.getTiempoCPU_OS() / totalTiempo)) + "%, Procesos=" 
-                + String.format("%.2f", (100.0 * cpuProc / totalTiempo)) + "%");
-        }
     }
 
     // --- Getters ---

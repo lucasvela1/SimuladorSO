@@ -9,15 +9,13 @@ public class RoundRobin implements Planificador {
 
     @Override
     public Proceso seleccionarSiguienteProceso(ColaListos colaListos, List<Proceso> procesos) {
-        //Round Robin toma el siguiente proceso siempre
-        if (colaListos.estaVacia()) {
-            return null;
-        }
-        
+        // Round Robin usa una cola FIFO simple para seleccionar al siguiente.
         return colaListos.quitar();
     }
+
     @Override
     public boolean esExpropiativo() {
-        return false; // FCFS no es expropiativo
+        // Es expropiativo porque el quantum puede interrumpir un proceso.
+        return true;
     }
 }
