@@ -19,18 +19,17 @@ public class Simulador {
 
     // --- Atributos del Estado de la Simulación ---
     private int tiempoActual;
-    private List<Proceso> procesos;             // Lista de todos los procesos definidos en la tanda
-    private SystemParams params;                // Parámetros del sistema (TIP, TFP, TCP, Quantum)
+    private List<Proceso> procesos;           // Lista de todos los procesos definidos en la tanda
+    private SystemParams params;              // Parámetros del sistema (TIP, TFP, TCP, Quantum)
     
-    private Planificador planificador;          // Estrategia de planificación seleccionada
-    private EstadoCPU cpu;                      // Estado actual del procesador
-    private ColaListos colaListos;              // Cola de procesos listos
-    private List<Proceso> colaBloqueados;       // Cola de procesos bloqueados (esperando E/S)
-    private List<Proceso> colaNuevos;           // Procesos que arribaron pero aún no ingresan al sistema (TIP)
+    private Planificador planificador;        // Estrategia de planificación seleccionada
+    private EstadoCPU cpu;                    // Estado actual del procesador
+    private ColaListos colaPrincipal;         // Fila única de planificación, ordenada por orden de llegada (FIFO).
+    private List<Proceso> colaBloqueados;     // Cola de procesos bloqueados (esperando E/S)
 
     // --- Resultados de la Simulación ---
-    private List<Evento> log;                   // Registro de eventos
-    private Metricas metricas;                  // Métricas acumuladas
+    private List<Evento> log;                 // Registro de eventos
+    private Metricas metricas;                // Métricas acumuladas
     private boolean simulacionTerminada;
 
     /**
@@ -44,9 +43,8 @@ public class Simulador {
 
         // Inicializar componentes internos
         this.cpu = new EstadoCPU();
-        this.colaListos = new ColaListos();
+        this.colaPrincipal = new ColaListos(); // Usa una cola FIFO (LinkedList)
         this.colaBloqueados = new ArrayList<>();
-        this.colaNuevos = new ArrayList<>();
         this.log = new ArrayList<>();
         this.metricas = new Metricas();
         this.simulacionTerminada = false;
@@ -60,10 +58,10 @@ public class Simulador {
 
         while (!simulacionTerminada) {
             ejecutarCiclo();
-            tiempoActual++;
         }
-
-        registrarEvento(null, "FIN_SIMULACION", "La simulación ha terminado en t=" + tiempoActual);
+        
+        int tiempoFinal = tiempoActual > 0 ? tiempoActual - 1 : 0;
+        registrarEvento(null, "FIN_SIMULACION", "La simulación ha terminado en t=" + tiempoFinal);
         calcularMetricasFinales();
     }
 
@@ -71,65 +69,44 @@ public class Simulador {
      * Ejecuta un ciclo (tick de reloj) de la simulación.
      */
     private void ejecutarCiclo() {
-        // 1. Actualizar procesos bloqueados (si terminan su E/S → listos)
+        // 1. Actualizar procesos bloqueados (si terminan su E/S → se re-encolan en la fila principal)
         actualizarColaBloqueados();
         
-        // 2. Procesar llegada de nuevos procesos (cuando arriba su tiempo)
+        // 2. Procesar llegada de nuevos procesos (cuando arriban → se encolan en la fila principal)
         procesarLlegadas();
         
-        // 3. Procesos nuevos pagan TIP antes de entrar a listos
-        actualizarColaNuevos();
-
-        // 4. Gestionar la CPU (ejecución, cambios de contexto, etc.)
+        // 3. Gestionar la CPU
         gestionarCPU();
 
-        // 5. Aumentar contador de espera en cola de listos
-        for (Proceso p : colaListos.getCola()) {
+        // 4. Aumentar contador de espera en la fila principal
+        for (Proceso p : colaPrincipal.getCola()) {
             p.setTiempoEnEstadoListo(p.getTiempoEnEstadoListo() + 1);
         }
 
-        // 6. Verificar condición de fin
+        // 5. Verificar condición de fin
         verificarCondicionDeFin();
+        
+        // 6. Avanzar el tiempo
+        if (!simulacionTerminada) {
+            tiempoActual++;
+        }
     }
 
     /**
-     * Marca los procesos que llegan al sistema según su tiempo de arribo.
+     * Marca los procesos que llegan al sistema y los encola en la fila principal.
      */
     private void procesarLlegadas() {
         for (Proceso p : procesos) {
             if (p.getEstado().equals("NO_LLEGADO") && p.getTiempoArribo() <= tiempoActual) {
                 p.setEstado("NUEVO");
-                colaNuevos.add(p);
-                registrarEvento(p.getPid(), "ARRIBO_PROCESO", "El proceso " + p.getNombre() + " ha arribado.");
+                colaPrincipal.agregar(p); // Se añade a la fila única.
+                registrarEvento(p.getPid(), "ARRIBO_PROCESO", "El proceso " + p.getNombre() + " ha arribado y se encola.");
             }
         }
     }
 
     /**
-     * Los procesos en estado NUEVO deben pagar TIP (tiempo de ingreso al sistema).
-     * TIP se ejecuta con CPU y cuenta como tiempo de SO, no como quantum del proceso.
-     */
-/**
-     * Si la CPU no está ocupada con un TIP, busca un proceso nuevo y lo
-     * prepara para que la CPU lo admita.
-     */
-    private void actualizarColaNuevos() {
-        // Solo intentamos admitir un nuevo proceso si la CPU no está ya ocupada con un TIP
-        if (!colaNuevos.isEmpty() && cpu.getTiempoRestanteTIP() == 0 && cpu.estaOciosa() && cpu.getTiempoRestanteTCP() == 0) {
-            Proceso p = colaNuevos.get(0); // Tomamos el primero de la cola de nuevos
-
-            // Preparamos al CPU para que maneje el TIP
-            cpu.setProcesoADespachar(p);
-            cpu.setTiempoRestanteTIP(params.getTip());
-            registrarEvento(p.getPid(), "INICIO_TIP", "Proceso " + p.getNombre() + " inicia TIP.");
-            
-            // IMPORTANTE: Lo removemos de 'nuevos' para no procesarlo de nuevo.
-            // La CPU ahora se encargará de él.
-            colaNuevos.remove(p); 
-        }
-    }
-    /**
-     * Disminuye tiempos de E/S y mueve procesos bloqueados a listos cuando corresponde.
+     * Disminuye tiempos de E/S y mueve procesos a la fila principal cuando corresponde.
      */
     private void actualizarColaBloqueados() {
         List<Proceso> desbloqueados = new ArrayList<>();
@@ -137,49 +114,40 @@ public class Simulador {
             p.setTiempoRestanteES(p.getTiempoRestanteES() - 1);
 
             if (p.getTiempoRestanteES() <= 0) {
-                colaListos.agregar(p);
+                p.setEstado("LISTO"); 
+                colaPrincipal.agregar(p); // Se re-encola en la fila única, al final.
                 desbloqueados.add(p);
-                registrarEvento(p.getPid(), "BLOQUEADO_A_LISTO", "Proceso " + p.getNombre() + " terminó E/S.");
+                registrarEvento(p.getPid(), "BLOQUEADO_A_LISTO", "Proceso " + p.getNombre() + " terminó E/S y se re-encola.");
             }
         }
         colaBloqueados.removeAll(desbloqueados);
     }
 
     /**
-     * Lógica central de gestión de la CPU:
-     * - Ejecuta TIP, TCP, TFP como tiempo de SO.
-     * - Ejecuta quantum de procesos en ejecución.
-     * - Decide cuándo despachar nuevos procesos.
-     */
-     /**
-     * Lógica central de gestión de la CPU:
-     * - Ejecuta TIP, TCP, TFP como tiempo de SO.
-     * - Ejecuta quantum de procesos en ejecución.
-     * - Decide cuándo despachar nuevos procesos.
+     * Lógica central de gestión de la CPU con el modelo de Fila Única y ejecución post-TIP inmediata.
      */
     private void gestionarCPU() {
-        // Caso 1: CPU atendiendo TIP (tiempo de ingreso al sistema)
+        // --- PARTE 1: GESTIONAR LA CPU SI ESTÁ OCUPADA ---
+
+        // Atendiendo TIP (Tiempo de Ingreso de Proceso)
         if (cpu.getTiempoRestanteTIP() > 0) {
             cpu.setTiempoRestanteTIP(cpu.getTiempoRestanteTIP() - 1);
             metricas.incrementarTiempoCPU_OS();
-
             if (cpu.getTiempoRestanteTIP() == 0) {
                 Proceso p = cpu.getProcesoADespachar();
                 if (p != null) {
-                    colaListos.agregar(p);
-                    registrarEvento(p.getPid(), "FIN_TIP", "Proceso " + p.getNombre() + " completó TIP y pasa a Listos.");
-                    cpu.setProcesoADespachar(null);
+                    registrarEvento(p.getPid(), "FIN_TIP", "Proceso " + p.getNombre() + " completó TIP.");
+                    p.setEstado("LISTO");
+                    despacharProceso(p); // Inmediatamente se despacha para ejecución (inicia TCP).
                 }
             }
-            // Ya no es necesario el return aquí, permite que el ciclo continúe
-            // por si justo en este tick la CPU queda libre y puede iniciar un TCP.
+            return; 
         }
 
-        // Caso 2: CPU atendiendo TCP/TFP (cambio de contexto o fin de proceso)
+        // Atendiendo TCP/TFP (Tiempo de Cambio de Proceso / Fin de Proceso)
         if (cpu.getTiempoRestanteTCP() > 0) {
             cpu.setTiempoRestanteTCP(cpu.getTiempoRestanteTCP() - 1);
             metricas.incrementarTiempoCPU_OS();
-
             if (cpu.getTiempoRestanteTCP() == 0) {
                 Proceso p = cpu.getProcesoADespachar();
                 if (p != null) {
@@ -187,31 +155,26 @@ public class Simulador {
                     registrarEvento(p.getPid(), "DESPACHO_PROCESO", "Proceso " + p.getNombre() + " pasa a ejecución.");
                 }
             }
-            return; // El TCP consume este ciclo completo
+            return;
         }
 
-        // Caso 3: CPU ejecutando un proceso
+        // Ejecutando un proceso de usuario
         if (!cpu.estaOciosa()) {
             Proceso actual = cpu.getProcesoActual();
             actual.setTiempoRestanteRafagaCPU(actual.getTiempoRestanteRafagaCPU() - 1);
             cpu.setQuantumRestante(cpu.getQuantumRestante() - 1);
 
-            // ¿Terminó la ráfaga?
             if (actual.getTiempoRestanteRafagaCPU() <= 0) {
                 actual.setRafagasRestantes(actual.getRafagasRestantes() - 1);
                 registrarEvento(actual.getPid(), "FIN_RAFAGA_CPU", "Proceso " + actual.getNombre() + " terminó ráfaga de CPU.");
-
                 if (actual.getRafagasRestantes() <= 0) {
-                    // Proceso terminado → paga TFP antes de salir
                     actual.setEstado("TERMINADO");
                     actual.setTiempoFinEjecucion(tiempoActual);
                     registrarEvento(actual.getPid(), "PROCESO_TERMINADO", "Proceso " + actual.getNombre() + " ha finalizado.");
-
                     cpu.liberar();
-                    cpu.setTiempoRestanteTCP(params.getTfp()); // TFP usa mismo canal que TCP
+                    cpu.setTiempoRestanteTCP(params.getTfp());
                     cpu.setProcesoADespachar(null);
                 } else {
-                    // Le quedan ráfagas → va a bloqueado (E/S)
                     actual.setEstado("BLOQUEADO");
                     actual.setTiempoRestanteES(actual.getDuracionRafagaES());
                     actual.setTiempoRestanteRafagaCPU(actual.getDuracionRafagaCPU());
@@ -219,34 +182,43 @@ public class Simulador {
                     registrarEvento(actual.getPid(), "EJECUCION_A_BLOQUEADO", "Proceso " + actual.getNombre() + " inicia E/S.");
                     cpu.liberar();
                 }
-            }
-            // ¿Se agotó el quantum? (solo aplica Round Robin)
-            else if (cpu.getQuantumRestante() <= 0) {
-                colaListos.agregar(actual);
-                registrarEvento(actual.getPid(), "FIN_QUANTUM", "Proceso " + actual.getNombre() + " vuelve a listos por fin de quantum.");
+            } else if (cpu.getQuantumRestante() <= 0) {
+                actual.setEstado("LISTO");
+                colaPrincipal.agregar(actual);
+                registrarEvento(actual.getPid(), "FIN_QUANTUM", "Proceso " + actual.getNombre() + " vuelve a la fila por fin de quantum.");
                 cpu.liberar();
             }
-            return; // La ejecución de proceso consumió el ciclo
         }
 
-        // Caso 4: CPU libre → buscar siguiente proceso a ejecutar
-        if (cpu.estaOciosa() && cpu.getTiempoRestanteTCP() == 0 && cpu.getTiempoRestanteTIP() == 0) {
-            Proceso proximo = planificador.seleccionarSiguienteProceso(colaListos, procesos);
+        // --- PARTE 2: DECIDIR QUÉ HACER SI LA CPU ESTÁ LIBRE ---
+        if (cpu.estaOciosa()) {
+            Proceso proximo = colaPrincipal.quitar(); 
+
             if (proximo != null) {
-                despacharProceso(proximo);
+                if (proximo.getEstado().equals("NUEVO")) {
+                    // Si es NUEVO, necesita ser admitido (pagar TIP).
+                    cpu.setProcesoADespachar(proximo);
+                    cpu.setTiempoRestanteTIP(params.getTip());
+                    registrarEvento(proximo.getPid(), "INICIO_TIP", "Proceso " + proximo.getNombre() + " es seleccionado para admisión (TIP).");
+                    metricas.incrementarTiempoCPU_OS();
+                } else { // Si no es NUEVO, es LISTO.
+                    // Si está LISTO, necesita ejecutarse (pagar TCP).
+                    despacharProceso(proximo);
+                    metricas.incrementarTiempoCPU_OS();
+                }
             } else {
+                // La fila principal está vacía, no hay nada que hacer.
                 metricas.incrementarTiempoCPUDesocupada();
             }
         }
     }
 
-
     /**
      * Inicia un cambio de contexto antes de ejecutar un proceso.
      */
     private void despacharProceso(Proceso p) {
-        cpu.setTiempoRestanteTCP(params.getTcp());
-        cpu.setProcesoADespachar(p);
+        cpu.setProcesoADespachar(p); // Guardamos el proceso a despachar
+        cpu.setTiempoRestanteTCP(params.getTcp()); // Asignamos el tiempo de cambio de contexto
         registrarEvento(p.getPid(), "INICIO_TCP", "Iniciando cambio de contexto para " + p.getNombre());
     }
     
@@ -277,7 +249,8 @@ public class Simulador {
 
         for (Proceso p : procesos) {
             int tr = p.getTiempoFinEjecucion() - p.getTiempoArribo();
-            double trn = (double) tr / (p.getCantidadRafagasCPU() * p.getDuracionRafagaCPU());
+            double trn = (p.getCantidadRafagasCPU() * p.getDuracionRafagaCPU() > 0) ?
+                         (double) tr / (p.getCantidadRafagasCPU() * p.getDuracionRafagaCPU()) : 0;
 
             sumaTR += tr;
             sumaTRN += trn;
@@ -285,12 +258,12 @@ public class Simulador {
             System.out.println("Proceso " + p.getPid() + " (" + p.getNombre() + "):");
             System.out.println("  TRp = " + tr);
             System.out.println("  TRn = " + String.format("%.2f", trn));
-            System.out.println("  Tiempo en Listo = " + p.getTiempoEnEstadoListo());
+            System.out.println("  Tiempo en Fila = " + p.getTiempoEnEstadoListo());
         }
 
         int trt = procesos.stream().mapToInt(Proceso::getTiempoFinEjecucion).max().orElse(0)
-                 - procesos.stream().mapToInt(Proceso::getTiempoArribo).min().orElse(0);
-        double tmrt = (double) sumaTR / procesos.size();
+                  - procesos.stream().mapToInt(Proceso::getTiempoArribo).min().orElse(0);
+        double tmrt = (procesos.isEmpty()) ? 0 : (double) sumaTR / procesos.size();
 
         metricas.setTiempoRetornoTanda(trt);
         metricas.setTiempoMedioRetornoTanda(tmrt);
@@ -300,15 +273,19 @@ public class Simulador {
         System.out.println("TMRt = " + String.format("%.2f", tmrt));
 
         System.out.println("\n==== USO DE CPU ====");
-        int totalTiempo = tiempoActual;
+        int totalTiempo = tiempoActual > 0 ? tiempoActual - 1 : 0;
         int cpuProc = totalTiempo - (metricas.getTiempoCPUDesocupada() + metricas.getTiempoCPU_OS());
+        System.out.println("Tiempo Total = " + totalTiempo);
         System.out.println("CPU Desocupada = " + metricas.getTiempoCPUDesocupada());
         System.out.println("CPU SO = " + metricas.getTiempoCPU_OS());
         System.out.println("CPU Procesos = " + cpuProc);
-        System.out.println("Porcentajes: Desocupada=" 
-            + (100.0 * metricas.getTiempoCPUDesocupada() / totalTiempo) + "%, SO=" 
-            + (100.0 * metricas.getTiempoCPU_OS() / totalTiempo) + "%, Procesos=" 
-            + (100.0 * cpuProc / totalTiempo) + "%");
+        
+        if (totalTiempo > 0) {
+            System.out.println("Porcentajes: Desocupada=" 
+                + String.format("%.2f", (100.0 * metricas.getTiempoCPUDesocupada() / totalTiempo)) + "%, SO=" 
+                + String.format("%.2f", (100.0 * metricas.getTiempoCPU_OS() / totalTiempo)) + "%, Procesos=" 
+                + String.format("%.2f", (100.0 * cpuProc / totalTiempo)) + "%");
+        }
     }
 
     // --- Getters ---
