@@ -36,15 +36,15 @@ import com.simulador.scheduler.SRTN;
 
 public class VentanaPrincipal extends JFrame {
 
-    // Componentes de la UI
+    //Componentes de la UI
     private JTextArea logArea;
     private JButton iniciarButton;
     private JComboBox<String> selectorAlgoritmo;
     private JTextField tipField, tfpField, tcpField, quantumField;
 
-    // Datos de la simulación
+    //Datos de la simulación
     private List<Proceso> procesosCargados;
-    private Simulador simulador; // Atributo para guardar la instancia del simulador
+    private Simulador simulador; //Atributo para guardar la instancia del simulador
 
     public VentanaPrincipal() {
         setTitle("Simulador de Planificación de CPU");
@@ -52,7 +52,7 @@ public class VentanaPrincipal extends JFrame {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
         
-        // ---- Panel de Controles (Norte) ----
+        //Panel de Controles (Norte)
         JPanel panelControles = new JPanel();
         String[] algoritmos = {"FCFS", "SPN", "Prioridad Externa", "SRTN", "Round-Robin"};
         selectorAlgoritmo = new JComboBox<>(algoritmos);
@@ -72,28 +72,28 @@ public class VentanaPrincipal extends JFrame {
         panelControles.add(new JLabel("Quantum:"));
         panelControles.add(quantumField);
 
-        // ---- Área de Log (Centro) ----
+        //Área de Log (Centro)
         logArea = new JTextArea();
         logArea.setEditable(false);
         logArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
         JScrollPane scrollPane = new JScrollPane(logArea);
 
-        // ---- Panel de Botones (Sur) ----
+        //Panel de Botones (Sur)
         JPanel panelBotones = new JPanel();
         JButton cargarJsonButton = new JButton("Cargar JSON de Procesos");
         iniciarButton = new JButton("Iniciar Simulación");
-        iniciarButton.setEnabled(false); // Deshabilitado hasta cargar procesos
+        iniciarButton.setEnabled(false); //Deshabilitado hasta cargar procesos
         panelBotones.add(cargarJsonButton);
         panelBotones.add(iniciarButton);
 
-        // ---- Añadir paneles al Frame ----
+        //Añadir paneles al Frame
         Container contentPane = getContentPane();
         contentPane.setLayout(new BorderLayout());
         contentPane.add(panelControles, BorderLayout.NORTH);
         contentPane.add(scrollPane, BorderLayout.CENTER);
         contentPane.add(panelBotones, BorderLayout.SOUTH);
 
-        // --- LÓGICA DE LOS BOTONES ---
+        //Lógica de botones, el cargar json e iniciar simulación
         cargarJsonButton.addActionListener(e -> {
             JFileChooser fileChooser = new JFileChooser();
             fileChooser.setDialogTitle("Selecciona el archivo JSON");
@@ -113,13 +113,13 @@ public class VentanaPrincipal extends JFrame {
                 int tip = Integer.parseInt(tipField.getText());
                 int tfp = Integer.parseInt(tfpField.getText());
                 int tcp = Integer.parseInt(tcpField.getText());
-                int quantum = Integer.parseInt(quantumField.getText());
+                int quantum = Integer.parseInt(quantumField.getText()); //Convertimos lo ingresado a enteros
                 SystemParams params = new SystemParams(tip, tfp, tcp, quantum);
 
                 // 2. Crear el planificador seleccionado
                 String algoSeleccionado = (String) selectorAlgoritmo.getSelectedItem();
                 Planificador planificador = crearPlanificador(algoSeleccionado);
-                if (planificador == null) {
+                if (planificador == null) { //Imposible dado que es un JComboBox, pero por las dudas
                     JOptionPane.showMessageDialog(this, "Algoritmo no implementado.", "Error", JOptionPane.ERROR_MESSAGE);
                     iniciarButton.setEnabled(true);
                     return;
@@ -176,7 +176,7 @@ public class VentanaPrincipal extends JFrame {
                 logArea.append("   - Duración Ráfaga E/S: " + p.getDuracionRafagaES() + "\n");
                 logArea.append("   - Prioridad: " + p.getPrioridadExterna() + "\n");
             }
-            logArea.append("----------------------------------------\n");
+            logArea.append("----------------------------------------\n"); //Mostramos los datos de los procesos cargados
             
             iniciarButton.setEnabled(true);
 
@@ -228,7 +228,7 @@ public class VentanaPrincipal extends JFrame {
                     logArea.append(e.toString() + "\n");
                 }
 
-                // Mostrar métricas de la tanda
+                //Mostrar métricas de la tanda
                 logArea.append("\n==== METRICAS DE LA TANDA ====\n");
                 Metricas m = this.simulador.getMetricas();
                 logArea.append("Tiempo Retorno Tanda: " + m.getTiempoRetornoTanda() + "\n");
@@ -236,11 +236,11 @@ public class VentanaPrincipal extends JFrame {
                 logArea.append("CPU Desocupada: " + m.getTiempoCPUDesocupada() + "\n");
                 logArea.append("CPU SO: " + m.getTiempoCPU_OS() + "\n");
             
-                int totalTiempo = eventos.isEmpty() ? 0 : eventos.get(eventos.size() - 1).getTiempo(); 
+                int totalTiempo = eventos.isEmpty() ? 0 : eventos.get(eventos.size() - 1).getTiempo(); //Tomamos el tiempo del último evento como el tiempo total
                 int cpuProc = totalTiempo - (m.getTiempoCPUDesocupada() + m.getTiempoCPU_OS());
                 logArea.append("CPU Procesos: " + cpuProc + "\n");
 
-                // Mostrar métricas por proceso
+                //Mostrar métricas por proceso
                 logArea.append("\n==== METRICAS POR PROCESO ====\n");
                 List<Proceso> procesosFinalizados = this.simulador.getProcesos();
                 for (Proceso p : procesosFinalizados) {

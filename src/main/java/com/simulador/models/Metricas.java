@@ -1,14 +1,13 @@
 package com.simulador.models;
 
-/**
- * Almacena y calcula las métricas de rendimiento de la simulación.
- */
+
+//Almacena y calcula las métricas de rendimiento de la simulación.
 public class Metricas {
 
     private int tiempoCPUDesocupada;
-    private int tiempoCPU_OS; // Tiempo consumido por TIP, TFP, TCP
+    private int tiempoCPU_OS; //Tiempo consumido por TIP, TFP, TCP
     
-    // Métricas de la tanda
+    //Métricas de la tanda
     private int tiempoRetornoTanda;
     private double tiempoMedioRetornoTanda;
 
@@ -18,7 +17,8 @@ public class Metricas {
         this.tiempoRetornoTanda = 0;
         this.tiempoMedioRetornoTanda = 0.0;
     }
-
+    
+    //Getters y Setters
     public void incrementarTiempoCPUDesocupada() {
         this.tiempoCPUDesocupada++;
     }

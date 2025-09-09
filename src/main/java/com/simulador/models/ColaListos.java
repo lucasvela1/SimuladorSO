@@ -34,4 +34,8 @@ public class ColaListos {
     public Queue<Proceso> getCola() {
         return cola;
     }
+
+    public Proceso verSiguiente() {
+        return this.cola.peek();
+    }
 }

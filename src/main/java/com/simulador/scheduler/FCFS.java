@@ -9,12 +9,12 @@ public class FCFS implements Planificador {
 
     @Override
     public Proceso seleccionarSiguienteProceso(ColaListos colaListos, List<Proceso> procesos) {
-        // FCFS simplemente toma el primer proceso que entró a la cola.
+        //FCFS simplemente toma el primer proceso que entró a la cola.
         return colaListos.quitar();
     }
 
     @Override
     public boolean esExpropiativo() {
-        return false; // FCFS no es expropiativo
+        return false; //FCFS no es expropiativo
     }
 }

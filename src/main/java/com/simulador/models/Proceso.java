@@ -2,6 +2,7 @@ package com.simulador.models;
 
 import com.google.gson.annotations.SerializedName;
 
+//SerializedName es una instruccion para Gson para mapear los nombres de los atributos JSON a los atributos Java
 public class Proceso {
     @SerializedName("nombre")
     private String nombre;
@@ -21,7 +22,7 @@ public class Proceso {
     @SerializedName("prioridad_externa")
     private int prioridadExterna;
     
-    // --- Atributos de estado (el simulador los maneja) ---
+    //Atributos de estado
     private int rafagasRestantes;
     private int tiempoRestanteRafagaCPU;
     private int tiempoRestanteES;
@@ -36,7 +37,7 @@ public class Proceso {
     }
 
     public Proceso(Proceso otro) {
-      // Copiamos los atributos de definición
+      //Copiamos los atributos de definición
       this.nombre = otro.nombre;
       this.tiempoArribo = otro.tiempoArribo;
       this.cantidadRafagasCPU = otro.cantidadRafagasCPU;
@@ -44,7 +45,7 @@ public class Proceso {
       this.duracionRafagaES = otro.duracionRafagaES;
       this.prioridadExterna = otro.prioridadExterna;
 
-      // También copiamos los atributos de estado por si acaso, aunque se reinician
+      //También copiamos los atributos de estado 
       this.pid = otro.pid;
       this.estado = otro.estado;
       this.rafagasRestantes = otro.rafagasRestantes;
@@ -52,7 +53,7 @@ public class Proceso {
       this.tiempoRestanteES = otro.tiempoRestanteES;
       this.tiempoRestanteTIP = otro.tiempoRestanteTIP;
     
-      // Y los de métricas
+      //métricas
       this.tiempoFinEjecucion = otro.tiempoFinEjecucion;
       this.tiempoEnEstadoListo = otro.tiempoEnEstadoListo;
     }
@@ -68,7 +69,8 @@ public class Proceso {
         this.tiempoEnEstadoListo = 0;
         this.tiempoRestanteTIP = 0;
     }
-
+    
+    //Getters y Setters
     public String getNombre() {
         return nombre;
     }
