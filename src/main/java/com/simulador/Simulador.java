@@ -69,14 +69,14 @@ public class Simulador {
     private void ejecutarCiclo() {
         //Actualizar llegadas
         procesarLlegadas();
-
+        actualizarColaBloqueados();
         //Verificar si el nuevo estado causa una interrupción.
         if (planificador.esExpropiativo()) {
             verificarInterrupcion();
         }
         //Gestionar la CPU con la información más reciente.
         gestionarCPU();
-        actualizarColaBloqueados();
+
         //El que sale del bloqueo recién interrumpe en el siguiente ciclo (porque sale en el mismo ciclo que consume si no)
 
 
@@ -157,7 +157,7 @@ public class Simulador {
                     cpu.setTiempoRestanteTCP(params.getTfp());
                 } else {
                     actual.setEstado("BLOQUEADO");
-                    actual.setTiempoRestanteES(actual.getDuracionRafagaES()+1); //+1 porque se consume en el mismo ciclo
+                    actual.setTiempoRestanteES(actual.getDuracionRafagaES()); //+1 porque se consume en el mismo ciclo
                     colaBloqueados.add(actual);
                     registrarEvento(actual.getPid(), "EJECUCION_A_BLOQUEADO", "Proceso " + actual.getNombre() + " inicia E/S.");
                 }
@@ -263,15 +263,20 @@ public class Simulador {
     private void actualizarColaBloqueados() {
         List<Proceso> desbloqueados = new ArrayList<>();
         for (Proceso p : colaBloqueados) {
-            p.setTiempoRestanteES(p.getTiempoRestanteES() - 1); //Descontamos a cada uno una unidad de tiempo
             if (p.getTiempoRestanteES() <= 0) {
                 p.setEstado("LISTO");
+                if (!p.GetfueInterrumpido()){
+                    p.setTiempoRestanteRafagaCPU(p.getDuracionRafagaCPU());
+                }
                 colaPrincipal.agregar(p);
                 desbloqueados.add(p); //Pasa saber cuales sacar luego de la cola de bloqueados
                 registrarEvento(p.getPid(), "BLOQUEADO_A_LISTO", "Proceso " + p.getNombre() + " terminó E/S y se re-encola.");
             }
         }
-        colaBloqueados.removeAll(desbloqueados);
+        colaBloqueados.removeAll(desbloqueados);   
+        for (Proceso p : colaBloqueados){  
+          p.setTiempoRestanteES(p.getTiempoRestanteES() - 1); //Descontamos a cada uno una unidad de tiempo    
+        }  
     }
 
     private void verificarCondicionDeFin() {
