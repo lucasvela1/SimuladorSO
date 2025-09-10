@@ -31,6 +31,7 @@ public class Proceso {
     private int tiempoFinEjecucion;
     private int tiempoEnEstadoListo;
     private int tiempoRestanteTIP;
+    private boolean fueInterrumpido;
 
     public Proceso() {
         //Vacio para el Gson    
@@ -52,6 +53,7 @@ public class Proceso {
       this.tiempoRestanteRafagaCPU = otro.tiempoRestanteRafagaCPU;
       this.tiempoRestanteES = otro.tiempoRestanteES;
       this.tiempoRestanteTIP = otro.tiempoRestanteTIP;
+      this.fueInterrumpido = otro.fueInterrumpido;
     
       //métricas
       this.tiempoFinEjecucion = otro.tiempoFinEjecucion;
@@ -68,6 +70,7 @@ public class Proceso {
         this.tiempoFinEjecucion = 0;
         this.tiempoEnEstadoListo = 0;
         this.tiempoRestanteTIP = 0;
+        this.fueInterrumpido = false;
     }
     
     //Getters y Setters
@@ -183,6 +186,11 @@ public class Proceso {
         this.tiempoRestanteTIP = tiempoRestanteTIP;
     }
     
+    public boolean GetfueInterrumpido() {
+        return fueInterrumpido;
+    }
 
-   
+    public void setFueInterrumpido(boolean fueInterrumpido) {
+        this.fueInterrumpido = fueInterrumpido;
+    }
 }
