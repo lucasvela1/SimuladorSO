@@ -21,14 +21,14 @@ import com.simulador.scheduler.SRTN;
 public class Simulador {
 
     private int tiempoActual;
-    private List<Proceso> procesos;
-    private SystemParams params;
-    private Planificador planificador;
-    private EstadoCPU cpu;
-    private ColaListos colaPrincipal;
-    private List<Proceso> colaBloqueados;
-    private List<Evento> log;
-    private Metricas metricas;
+    private final List<Proceso> procesos;
+    private final SystemParams params;
+    private final Planificador planificador;
+    private final EstadoCPU cpu;
+    private final ColaListos colaPrincipal;
+    private final List<Proceso> colaBloqueados;
+    private final List<Evento> log;
+    private final Metricas metricas; //Pongo final porque se asigna en el constructor y no cambia más, pero se le pueden cambiar sus atributos
     private boolean simulacionTerminada;
     private Proceso ultimoProcesoTerminado;
 
@@ -197,9 +197,11 @@ public class Simulador {
                 }
             }
             if (debeInterrumpir) {
-                registrarEvento(actual.getPid(), "INTERRUPCION", "Proceso " + actual.getNombre() + " interrumpido por " + proximoEnCola.getNombre());
-                actual.setEstado("LISTO");
-                actual.setFueInterrumpido(true);
+                if (actual!=null && proximoEnCola != null) { //Validación solo para que no me salte el warning 
+                  registrarEvento(actual.getPid(), "INTERRUPCION", "Proceso " + actual.getNombre() + " interrumpido por " + proximoEnCola.getNombre());
+                  actual.setEstado("LISTO");
+                  actual.setFueInterrumpido(true); //OBVIAMENTE, si la variable debeInterrumpir esta en verdadera es porque actual y proximo son NO NULL, pero salta el warning igual
+                }              
                 colaPrincipal.agregar(actual);
                 cpu.liberar();
             }
@@ -220,8 +222,10 @@ public class Simulador {
         }
 
         if (debeSerExpropiado) {
-            registrarEvento(p.getPid(), "INCUMBENTE_EXPROPIADO", "Proceso " + p.getNombre() + " es expropiado por " + proximoEnCola.getNombre());
-            p.setFueInterrumpido(true);
+            if (p!=null && proximoEnCola != null){
+              registrarEvento(p.getPid(), "INCUMBENTE_EXPROPIADO", "Proceso " + p.getNombre() + " es expropiado por " + proximoEnCola.getNombre());
+              p.setFueInterrumpido(true);
+            }
             colaPrincipal.agregar(p);
             return colaPrincipal.quitar();
         }
