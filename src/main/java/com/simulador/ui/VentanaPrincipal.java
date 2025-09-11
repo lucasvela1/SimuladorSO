@@ -5,6 +5,7 @@ import java.awt.Container;
 import java.awt.Font;
 import java.io.File;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.List;
 
@@ -19,6 +20,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingWorker;
+import javax.swing.filechooser.FileNameExtensionFilter;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
@@ -41,6 +43,8 @@ public class VentanaPrincipal extends JFrame {
     private JButton iniciarButton;
     private JComboBox<String> selectorAlgoritmo;
     private JTextField tipField, tfpField, tcpField, quantumField;
+    private JButton ganttButton;
+    private JButton exportarButton;
 
     //Datos de la simulación
     private List<Proceso> procesosCargados;
@@ -83,8 +87,15 @@ public class VentanaPrincipal extends JFrame {
         JButton cargarJsonButton = new JButton("Cargar JSON de Procesos");
         iniciarButton = new JButton("Iniciar Simulación");
         iniciarButton.setEnabled(false); //Deshabilitado hasta cargar procesos
+        ganttButton = new JButton("Ver Diagrama de Gantt");
+        ganttButton.setEnabled(false); //Habilitado al finalizar la simulación
+        exportarButton = new JButton("Exportar Log a TXT");
+        exportarButton.setEnabled(false); //Habilitado al finalizar la simulación
+
         panelBotones.add(cargarJsonButton);
         panelBotones.add(iniciarButton);
+        panelBotones.add(ganttButton);
+        panelBotones.add(exportarButton);
 
         //Añadir paneles al Frame
         Container contentPane = getContentPane();
@@ -104,9 +115,23 @@ public class VentanaPrincipal extends JFrame {
             }
         });
 
+        ganttButton.addActionListener(e -> {
+            if (this.simulador != null) {
+                // Abre una nueva ventana para mostrar el diagrama de Gantt
+                VentanaGantt ventanaGantt = new VentanaGantt(this, this.simulador.getProcesos(), this.simulador.getLog());
+                ventanaGantt.setVisible(true);
+            }
+        });
+
+         exportarButton.addActionListener(e -> {
+            exportarResultados();
+        });
+
         iniciarButton.addActionListener(e -> {
             try {
                 iniciarButton.setEnabled(false);
+                ganttButton.setEnabled(false);
+                exportarButton.setEnabled(false);
                 logArea.setText(""); // Limpiar el log anterior
 
                 // 1. Recolectar los parámetros de la UI
@@ -189,6 +214,32 @@ public class VentanaPrincipal extends JFrame {
         }
     }
 
+    private void exportarResultados() {
+        if (this.simulador == null) {
+            JOptionPane.showMessageDialog(this, "No hay datos de simulación para exportar.", "Aviso", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Guardar resultados de la simulación");
+        fileChooser.setSelectedFile(new File("Datos simulacion.txt"));
+        fileChooser.setFileFilter(new FileNameExtensionFilter("Archivos de Texto (*.txt)", "txt"));
+
+        int userSelection = fileChooser.showSaveDialog(this);
+
+        if (userSelection == JFileChooser.APPROVE_OPTION) {
+            File archivoParaGuardar = fileChooser.getSelectedFile();
+            try (FileWriter writer = new FileWriter(archivoParaGuardar)) {
+                // Usamos el contenido del JTextArea que ya tiene todo formateado
+                writer.write(logArea.getText());
+                JOptionPane.showMessageDialog(this, "Resultados exportados exitosamente a:\n" + archivoParaGuardar.getAbsolutePath(), "Exportación Exitosa", JOptionPane.INFORMATION_MESSAGE);
+            } catch (IOException ex) {
+                JOptionPane.showMessageDialog(this, "Error al guardar el archivo: " + ex.getMessage(), "Error de Exportación", JOptionPane.ERROR_MESSAGE);
+                ex.printStackTrace();
+            }
+        }
+    }
+
     private Planificador crearPlanificador(String nombreAlgoritmo){
         switch (nombreAlgoritmo) {
             case "FCFS":
@@ -262,6 +313,8 @@ public class VentanaPrincipal extends JFrame {
                     JOptionPane.ERROR_MESSAGE);
             }
             iniciarButton.setEnabled(true);
+            ganttButton.setEnabled(true);
+            exportarButton.setEnabled(true);
         }
     }
 }

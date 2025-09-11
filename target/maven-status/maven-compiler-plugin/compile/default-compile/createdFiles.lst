@@ -3,12 +3,14 @@ com\simulador\Simulador.class
 com\simulador\ui\VentanaPrincipal$SimulacionWorker.class
 com\simulador\scheduler\FCFS.class
 com\simulador\ui\VentanaPrincipal$1.class
+com\simulador\ui\VentanaGantt.class
 com\simulador\ui\VentanaPrincipal.class
 com\simulador\models\SystemParams.class
 com\simulador\models\ColaListos.class
 com\simulador\models\Evento.class
 com\simulador\models\ColaListosSRT.class
 com\simulador\models\EstadoCPU.class
+com\simulador\ui\PanelGantt.class
 com\simulador\models\Metricas.class
 com\simulador\models\Proceso.class
 com\simulador\scheduler\RoundRobin.class
