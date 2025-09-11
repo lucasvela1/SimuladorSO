@@ -107,7 +107,7 @@ public class PanelGantt extends JPanel {
                 }
             }
         }
-        
+
         //Dibujos
         //3 Dibujar los rectángulos
         for (int i = 0; i < procesos.size(); i++) {
@@ -146,7 +146,7 @@ public class PanelGantt extends JPanel {
 
     @Override
     public Dimension getPreferredSize() {
-        if (eventos == null || eventos.isEmpty()) return new Dimension(800, 600);
+        if (eventos == null || eventos.isEmpty()) return new Dimension(800, 700);
         int tiempoTotal = eventos.get(eventos.size() - 1).getTiempo();
         int width = MARGIN_LEFT + (tiempoTotal + 2) * CELL_WIDTH;
         int height = MARGIN_TOP + procesos.size() * ROW_HEIGHT + 180;

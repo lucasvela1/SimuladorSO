@@ -15,7 +15,7 @@ public class VentanaGantt extends JDialog {
     public VentanaGantt(JFrame parent, List<Proceso> procesos, List<Evento> eventos) {
         super(parent, "Diagrama de Gantt", true); // true para que sea modal
         
-        setSize(1200, 500);
+        setSize(1200, 650);
         setLocationRelativeTo(parent);
         setLayout(new BorderLayout());
 
