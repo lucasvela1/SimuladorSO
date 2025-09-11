@@ -5,15 +5,14 @@ import java.util.PriorityQueue;
 
 /*
    Representa la cola de procesos para el planificador de Prioridad Externa.
-   Usa una PriorityQueue para asegurar que el proceso con la mayor prioridad
-   (menor número de prioridad) siempre esté al frente.
+   Usa una PriorityQueue para asegurar que el proceso con la mayor prioridad siempre esté al frente.
  */
 
 public class ColaListosPrioridad extends ColaListos {
 
     public ColaListosPrioridad() {
-        // El comparador ordena por el número de prioridad, de menor a mayor.
-        super.cola = new PriorityQueue<Proceso>(Comparator.comparingInt(Proceso::getPrioridadExterna));
+        // El comparador ordena por el número de prioridad, de mayor a menor.
+        super.cola = new PriorityQueue<>(Comparator.comparingInt(Proceso::getPrioridadExterna).reversed());
 
     }
 

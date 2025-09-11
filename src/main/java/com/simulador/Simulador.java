@@ -192,7 +192,7 @@ public class Simulador {
             if (proximoEnCola != null) {
                 if (planificador instanceof SRTN && proximoEnCola.getTiempoRestanteRafagaCPU() < actual.getTiempoRestanteRafagaCPU()) {
                     debeInterrumpir = true;
-                } else if (planificador instanceof PrioridadExterna && proximoEnCola.getPrioridadExterna() < actual.getPrioridadExterna()) {
+                } else if (planificador instanceof PrioridadExterna && proximoEnCola.getPrioridadExterna() > actual.getPrioridadExterna()) {
                     debeInterrumpir = true;
                 }
             }
@@ -214,8 +214,8 @@ public class Simulador {
         Proceso proximoEnCola = colaPrincipal.verSiguiente();
         boolean debeSerExpropiado = false;
         if (proximoEnCola != null) {
-            if (planificador instanceof PrioridadExterna && proximoEnCola.getPrioridadExterna() < p.getPrioridadExterna()) {
-                debeSerExpropiado = true; //Si la prioridad del de la cola es mayor (número menor), expropia. SOLO SI ES MAYOR, SI ES IGUAL SIGUE EL MISMO
+            if (planificador instanceof PrioridadExterna && proximoEnCola.getPrioridadExterna() > p.getPrioridadExterna()) {
+                debeSerExpropiado = true; //Si la prioridad del de la cola es mayor, expropia. SOLO SI ES MAYOR, SI ES IGUAL SIGUE EL MISMO
             } else if (planificador instanceof SRTN && proximoEnCola.getTiempoRestanteRafagaCPU() < p.getTiempoRestanteRafagaCPU()) {
                 debeSerExpropiado = true; //IDem arriba
             }
