@@ -30,13 +30,12 @@ public class PanelGantt extends JPanel {
         this.eventos = eventos;
 
         stateColors = new HashMap<>();
-        stateColors.put("EJECUCION", new Color(76, 175, 80));      // Verde
-        stateColors.put("BLOQUEADO", new Color(244, 67, 54));      // Rojo
-        stateColors.put("LISTO", new Color(255, 193, 7));         // Amarillo
-        stateColors.put("NUEVO", new Color(173, 216, 230));       // Celeste
-        stateColors.put("TIP", new Color(189, 189, 189));         // Gris claro
-        stateColors.put("TCP", new Color(117, 117, 117));         // Gris medio
-        stateColors.put("TFP", new Color(66, 66, 66));           // Gris oscuro
+        stateColors.put("EJECUCION", Color.GREEN);      
+        stateColors.put("BLOQUEADO", Color.RED);      
+        stateColors.put("LISTO", Color.YELLOW);         
+        stateColors.put("NUEVO", Color.CYAN);       
+        stateColors.put("TCP", Color.GRAY);        
+        stateColors.put("TFP", Color.DARK_GRAY);           
         stateColors.put("TERMINADO", Color.WHITE);
         stateColors.put("NO_LLEGADO", Color.WHITE);
     }
@@ -49,41 +48,39 @@ public class PanelGantt extends JPanel {
         if (procesos == null || procesos.isEmpty() || eventos == null || eventos.isEmpty()) {
             g.drawString("No hay datos para mostrar.", 20, 20);
             return;
-        }
+        } //Por si fallase la simulacion, no deberia en teoria
 
         int tiempoTotal = eventos.get(eventos.size() - 1).getTiempo();
 
-        // 1. Dibujar etiquetas y escala de tiempo (sin cambios)
+        //1 Dibujar etiquetas y escala de tiempo (ProcesosXTiempo)
         g.setFont(new Font("Arial", Font.BOLD, 12));
         for (int i = 0; i < procesos.size(); i++) {
             Proceso p = procesos.get(i);
             g.drawString("P" + p.getPid() + " (" + p.getNombre() + ")", 10, MARGIN_TOP + i * ROW_HEIGHT + ROW_HEIGHT / 2 + 5);
-        }
+        } //Filas= a la cantidad de procesos
         g.setFont(new Font("Arial", Font.PLAIN, 10));
         for (int t = 0; t <= tiempoTotal; t++) {
             if (t % 5 == 0) {
                 g.drawString(String.valueOf(t), MARGIN_LEFT + t * CELL_WIDTH, MARGIN_TOP - 10);
                 g.drawLine(MARGIN_LEFT + t * CELL_WIDTH, MARGIN_TOP - 5, MARGIN_LEFT + t * CELL_WIDTH, MARGIN_TOP);
-            }
+            } //Columnas igual al tiempo total, pero con escala de 5
         }
 
-        // 2. Lógica definitiva para construir la matriz de estados
         String[][] estadoEnTiempo = new String[procesos.size() + 1][tiempoTotal + 2]; // Matriz inicializada a null
 
-        for (int t = 0; t <= tiempoTotal; t++) {
-            // Propagación inteligente: solo si el estado no ha sido preestablecido
+        for (int t = 0; t <= tiempoTotal; t++) { //Recorre de 0 al tiempo total
             for (Proceso p : procesos) {
                 int pid = p.getPid();
-                if (estadoEnTiempo[pid][t] == null) { // <-- ¡LA CLAVE ESTÁ AQUÍ!
+                if (estadoEnTiempo[pid][t] == null) { 
                     if (t > 0) {
                         estadoEnTiempo[pid][t] = estadoEnTiempo[pid][t - 1];
                     } else {
-                        estadoEnTiempo[pid][t] = "NO_LLEGADO";
+                        estadoEnTiempo[pid][t] = "NO_LLEGADO"; //Hasta que no tenga su primer evento (o sea llegada) es NO_LLEGADO
                     }
                 }
             }
 
-            // Aplicar los eventos del instante 't'
+            //Aplicar los eventos del instante T
             for (Evento e : eventos) {
                 if (e.getTiempo() == t && e.getPid() != null) {
                     int pid = e.getPid();
@@ -97,21 +94,22 @@ public class PanelGantt extends JPanel {
                         case "FIN_TIP": case "BLOQUEADO_A_LISTO": case "FIN_QUANTUM": case "INTERRUPCION": estadoEnTiempo[pid][t] = "LISTO"; break;
                         case "FIN TFP": estadoEnTiempo[pid][t] = "TERMINADO"; break;
                         
-                        // Eventos que definen el estado del siguiente tick
+                        //Eventos que definen el estado del siguiente tick
                         case "EJECUCION_A_BLOQUEADO":
                             estadoEnTiempo[pid][t] = "EJECUCION";
                             if (t + 1 <= tiempoTotal) estadoEnTiempo[pid][t + 1] = "BLOQUEADO";
-                            break;
+                            break; //En T=5 tiene ejecucion a bloqueado, pero tambien en T=5 se ejecuta, recien en T=6 se consume tiempo de bloqueado
                         case "PROCESO_TERMINADO":
-                            // El último tick fue de ejecución, el TFP comienza ahora.
+                            //El último tick fue de ejecución, el TFP comienza ahora.
                              estadoEnTiempo[pid][t] = "TFP";
                             break;
                     }
                 }
             }
         }
-
-        // 3. Dibujar los rectángulos (sin cambios)
+        
+        //Dibujos
+        //3 Dibujar los rectángulos
         for (int i = 0; i < procesos.size(); i++) {
             int pid = procesos.get(i).getPid();
             for (int t = 0; t <= tiempoTotal; t++) {
@@ -127,7 +125,7 @@ public class PanelGantt extends JPanel {
             }
         }
         
-        // 4. Dibujar leyenda (sin cambios)
+        //4 Dibujar leyenda
         int legendY = MARGIN_TOP + procesos.size() * ROW_HEIGHT + 40;
         int legendX = MARGIN_LEFT;
         g.setFont(new Font("Arial", Font.BOLD, 12));
