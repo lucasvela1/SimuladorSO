@@ -3,12 +3,14 @@ package com.simulador.ui;
 import java.awt.BorderLayout;
 import java.awt.event.ActionListener;
 import java.util.List;
+
 import javax.swing.JButton;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.Timer;
+
 import com.simulador.models.Evento;
 import com.simulador.models.Proceso;
 
@@ -31,12 +33,12 @@ public class VentanaGantt extends JDialog {
         setLocationRelativeTo(parent);
         setLayout(new BorderLayout());
 
-        // 1. Crear el panel de dibujo y el scroll pane
+        //Crear el panel de dibujo y el scroll pane
         panelGantt = new PanelGantt(procesos, eventos);
         JScrollPane scrollPane = new JScrollPane(panelGantt);
         add(scrollPane, BorderLayout.CENTER);
 
-        // 2. Crear los botones de control
+        //Crear los botones de control
         pausarButton = new JButton("Pausar");
         finalizarButton = new JButton("Finalizar Animación");
         repetirButton = new JButton("Repetir Animación");
@@ -48,18 +50,16 @@ public class VentanaGantt extends JDialog {
         panelBotones.add(repetirButton);
         add(panelBotones, BorderLayout.SOUTH);
 
-        // 3. Determinar el tiempo total ANTES de crear el timer
+        //Determinar el tiempo total ANTES de crear el timer
         if (eventos != null && !eventos.isEmpty()) {
             this.tiempoTotal = eventos.get(eventos.size() - 1).getTiempo();
         } else {
             this.tiempoTotal = 0;
         }
 
-        // 4. Crear el ActionListener y el Timer
+        //Crear el ActionListener y el Timer
         ActionListener animador = e -> {
             if (tiempoAnimacionActual > tiempoTotal) {
-                // --- LA CORRECCIÓN CLAVE ESTÁ AQUÍ ---
-                // En lugar de llamar a 'timerAnimacion.stop()', obtenemos el timer del evento.
                 ((Timer) e.getSource()).stop();
                 finalizarButton.setEnabled(false);
                 pausarButton.setEnabled(false);
@@ -70,9 +70,9 @@ public class VentanaGantt extends JDialog {
             }
         };
 
-        timerAnimacion = new Timer(50, animador); // Ahora esto es seguro
+        timerAnimacion = new Timer(600, animador); //Aca se cambia para hacer que la animación sea más rápida o más lenta
 
-        // 5. Lógica de los botones
+        //Lógica de los botones
         pausarButton.addActionListener(e -> {
             if (isPaused) {
                 timerAnimacion.start();

@@ -67,20 +67,15 @@ public class Simulador {
     }
 
     private void ejecutarCiclo() {
-        //Actualizar llegadas
         procesarLlegadas();
         actualizarColaBloqueados();
-        //Verificar si el nuevo estado causa una interrupción.
         if (planificador.esExpropiativo()) {
             verificarInterrupcion();
         }
-        //Gestionar la CPU con la información más reciente.
         gestionarCPU();
 
         //El que sale del bloqueo recién interrumpe en el siguiente ciclo (porque sale en el mismo ciclo que consume si no)
 
-
-        //Actualizar métricas de espera y avanzar el tiempo.
         for (Proceso p : colaPrincipal.getCola()) {
             p.setTiempoEnEstadoListo(p.getTiempoEnEstadoListo() + 1);
         }
@@ -92,51 +87,77 @@ public class Simulador {
         }
     }
     
+    //LÓGICA DE FINALIZACIÓN DE OVERHEADS
+    private void onFinTIP(Proceso p) {
+        registrarEvento(p.getPid(), "FIN_TIP", "Proceso " + p.getNombre() + " completó TIP.");
+        p.setEstado("LISTO");
+        Proceso ganador = decidirProximoIncumbente(p);
+        iniciarDespachoOAdmision(ganador);
+    }
+
+    private boolean onFinTCP(Proceso p) {
+        Proceso ganador = decidirProximoIncumbente(p);
+        if (ganador == p) {
+            cpu.asignarProceso(ganador, params.getQuantum());
+            registrarEvento(ganador.getPid(), "DESPACHO_PROCESO", "Proceso " + ganador.getNombre() + " pasa a ejecución.");
+            return false;
+        } else {
+            iniciarDespachoOAdmision(ganador);
+            return true;
+        }
+    }
+
+    private void onFinTFP() {
+        if (this.ultimoProcesoTerminado != null) {
+            this.ultimoProcesoTerminado.setTiempoFinEjecucion(tiempoActual);
+            registrarEvento(this.ultimoProcesoTerminado.getPid(), "FIN TFP", "Proceso " + this.ultimoProcesoTerminado.getNombre() + " ha finalizado TFP");
+            this.ultimoProcesoTerminado = null;
+        }
+    }
+
     private void gestionarCPU() {
-        // Manejar TIP (Tiempo de Ingreso de Proceso)
+        //Manejar TIP en curso
         if (cpu.getTiempoRestanteTIP() > 0) {
             cpu.setTiempoRestanteTIP(cpu.getTiempoRestanteTIP() - 1);
             metricas.incrementarTiempoCPU_OS();
             if (cpu.getTiempoRestanteTIP() == 0) {
-                Proceso p = cpu.getProcesoADespachar();
-                registrarEvento(p.getPid(), "FIN_TIP", "Proceso " + p.getNombre() + " completó TIP.");
-                p.setEstado("LISTO");
-                Proceso ganador = decidirProximoIncumbente(p);
-                iniciarDespachoOAdmision(ganador);
+                onFinTIP(cpu.getProcesoADespachar());
             }
             return;
         }
 
-        // Manejar TCP (Cambio de Contexto) y TFP (Finalización)
+        //Manejar TCP y TFP en curso
         if (cpu.getTiempoRestanteTCP() > 0) {
             cpu.setTiempoRestanteTCP(cpu.getTiempoRestanteTCP() - 1);
             metricas.incrementarTiempoCPU_OS();
             if (cpu.getTiempoRestanteTCP() == 0) {
                 Proceso p = cpu.getProcesoADespachar();
                 if (p != null) { //Fin de un TCP
-                    Proceso ganador = decidirProximoIncumbente(p);
-                    if (ganador == p) {
-                        cpu.asignarProceso(ganador, params.getQuantum());
-                        registrarEvento(ganador.getPid(), "DESPACHO_PROCESO", "Proceso " + ganador.getNombre() + " pasa a ejecución.");
-                        //NO hay return para que la ejecución comience en este mismo ciclo.
-                    } else {
-                        iniciarDespachoOAdmision(ganador);
+                    if (onFinTCP(p)) {
                         return; //Hay cambio de incumbente, se inicia otro overhead y se sale.
                     }
-                } else { // Fin de un TFP
-                    if (this.ultimoProcesoTerminado != null) {
-                        this.ultimoProcesoTerminado.setTiempoFinEjecucion(tiempoActual);
-                        registrarEvento(this.ultimoProcesoTerminado.getPid(), "FIN TFP", "Proceso " + this.ultimoProcesoTerminado.getNombre() + " ha finalizado TFP");
-                        this.ultimoProcesoTerminado = null;
-                    }
-                    return; 
+                } else { //Fin de un TFP
+                    onFinTFP();
+                    return;
                 }
             } else {
-                return; // El TCP/TFP sigue en curso.
+                return; //El TCP/TFP sigue en curso.
             }
         }
 
-        //Ejecución normal de un proceso en CPU
+        //Si la CPU está Ociosa, buscar nuevo trabajo
+        if (cpu.estaOciosa()) {
+            Proceso proximo = colaPrincipal.quitar();
+            if (proximo != null) {
+                iniciarDespachoOAdmision(proximo);
+            } else {
+                metricas.incrementarTiempoCPUDesocupada();
+                return; //No hay procesos listos ni en ejecución, fin del trabajo de CPU en este ciclo.
+            }
+        }
+
+        //Si después de todo lo anterior la CPU tiene un proceso, se ejecuta.
+        //Esto permite la ejecución en el mismo ciclo para overheads de duración cero.
         if (!cpu.estaOciosa()) {
             Proceso actual = cpu.getProcesoActual();
             actual.setTiempoRestanteRafagaCPU(actual.getTiempoRestanteRafagaCPU() - 1);
@@ -148,16 +169,21 @@ public class Simulador {
                 registrarEvento(actual.getPid(), "FIN_RAFAGA_CPU", "Proceso " + actual.getNombre() + " terminó ráfaga de CPU.");
                 
                 cpu.liberar();
-                //Verificamos si terminó porque se bloqueó o terminó
+                
                 if (actual.getRafagasRestantes() <= 0) {
                     actual.setEstado("TERMINADO");
                     this.ultimoProcesoTerminado = actual;
                     registrarEvento(actual.getPid(), "PROCESO_TERMINADO", "Proceso " + actual.getNombre() + " ha finalizado.");
                     cpu.setProcesoADespachar(null); //Marcar que el próximo es TFP
-                    cpu.setTiempoRestanteTCP(params.getTfp());
+                    
+                    if (params.getTfp() == 0) {
+                        onFinTFP();
+                    } else {
+                        cpu.setTiempoRestanteTCP(params.getTfp());
+                    }
                 } else {
                     actual.setEstado("BLOQUEADO");
-                    actual.setTiempoRestanteES(actual.getDuracionRafagaES()); //+1 porque se consume en el mismo ciclo
+                    actual.setTiempoRestanteES(actual.getDuracionRafagaES());
                     colaBloqueados.add(actual);
                     registrarEvento(actual.getPid(), "EJECUCION_A_BLOQUEADO", "Proceso " + actual.getNombre() + " inicia E/S.");
                 }
@@ -168,22 +194,11 @@ public class Simulador {
                 registrarEvento(actual.getPid(), "FIN_QUANTUM", "Proceso " + actual.getNombre() + " vuelve a la fila por fin de quantum.");
                 cpu.liberar();
             }
-            return; //Después de ejecutar, el trabajo de la CPU en este ciclo terminó.
-        }
-
-        //Si la CPU está Ociosa, buscar nuevo trabajo
-        if (cpu.estaOciosa()) {
-            Proceso proximo = colaPrincipal.quitar();
-            if (proximo != null) {
-                iniciarDespachoOAdmision(proximo);
-            } else {
-                metricas.incrementarTiempoCPUDesocupada();
-            }
         }
     }
-    
+    //El método que verifica si el proceso actual debe ser interrumpido o no
     private void verificarInterrupcion() {
-        if (planificador instanceof RoundRobin) return; //Porque es premtivo pero usa el Quantum para interrumpir
+        if (planificador instanceof RoundRobin) return;
         
         if (!cpu.estaOciosa() && cpu.getTiempoRestanteTIP() == 0 && cpu.getTiempoRestanteTCP() == 0) {
             Proceso actual = cpu.getProcesoActual();
@@ -198,18 +213,19 @@ public class Simulador {
             }
             if (debeInterrumpir) {
                 if (actual!=null && proximoEnCola != null) { //Validación solo para que no me salte el warning 
-                  registrarEvento(actual.getPid(), "INTERRUPCION", "Proceso " + actual.getNombre() + " interrumpido por " + proximoEnCola.getNombre());
-                  actual.setEstado("LISTO");
-                  actual.setFueInterrumpido(true); //OBVIAMENTE, si la variable debeInterrumpir esta en verdadera es porque actual y proximo son NO NULL, pero salta el warning igual
-                }              
+                    registrarEvento(actual.getPid(), "INTERRUPCION", "Proceso " + actual.getNombre() + " interrumpido por " + proximoEnCola.getNombre());
+                    actual.setEstado("LISTO");
+                    actual.setFueInterrumpido(true);
+                }                   
                 colaPrincipal.agregar(actual);
                 cpu.liberar();
             }
         }
     }
 
+    //El método que decide si el proceso actual debe ser expropiado o no
     private Proceso decidirProximoIncumbente(Proceso p) {
-        if (!planificador.esExpropiativo()) return p; //Si no es expropiativo, siempre sigue el mismo proceso.
+        if (!planificador.esExpropiativo()) return p;
         
         Proceso proximoEnCola = colaPrincipal.verSiguiente();
         boolean debeSerExpropiado = false;
@@ -223,15 +239,15 @@ public class Simulador {
 
         if (debeSerExpropiado) {
             if (p!=null && proximoEnCola != null){
-              registrarEvento(p.getPid(), "INCUMBENTE_EXPROPIADO", "Proceso " + p.getNombre() + " es expropiado por " + proximoEnCola.getNombre());
-              p.setFueInterrumpido(true);
+                registrarEvento(p.getPid(), "INCUMBENTE_EXPROPIADO", "Proceso " + p.getNombre() + " es expropiado por " + proximoEnCola.getNombre());
+                p.setFueInterrumpido(true);
             }
             colaPrincipal.agregar(p);
             return colaPrincipal.quitar();
         }
         return p;
     }
-
+    //El metodo que inicia el despacho o admisión de un proceso a la CPU dependiendo de su estado
     private void iniciarDespachoOAdmision(Proceso p) {
         if (!p.GetfueInterrumpido()) { //Esto es para mantener la duración de rafaga que llevaba
             p.setTiempoRestanteRafagaCPU(p.getDuracionRafagaCPU()); //No fue interrumpido, arranca nueva ráfaga
@@ -241,15 +257,24 @@ public class Simulador {
         registrarEvento(p.getPid(), "PROCESO_SELECCIONADO", "Proceso " + p.getNombre() + " seleccionado por el planificador.");
         
         cpu.setProcesoADespachar(p);
-        if (p.getEstado().equals("NUEVO")) {
-            cpu.setTiempoRestanteTIP(params.getTip());
+        
+        if (p.getEstado().equals("NUEVO")) { //Si es nuevo le hacemos TIP, si no, TCP
             registrarEvento(p.getPid(), "INICIO_TIP", "Proceso " + p.getNombre() + " es seleccionado para admisión (TIP).");
-        } else { //Si es nuevo le hacemos TIP, si no, TCP
-            cpu.setTiempoRestanteTCP(params.getTcp());
+            if (params.getTip() == 0) {
+                onFinTIP(p);
+            } else {
+                cpu.setTiempoRestanteTIP(params.getTip());
+            }
+        } else {
             registrarEvento(p.getPid(), "INICIO_TCP", "Iniciando cambio de contexto para " + p.getNombre());
+            if (params.getTcp() == 0) {
+                onFinTCP(p);
+            } else {
+                cpu.setTiempoRestanteTCP(params.getTcp());
+            }
         }
     }
-
+    //El método que procesa las llegadas de nuevos procesos en el tiempo actual
     private void procesarLlegadas() {
         for (Proceso p : procesos) {
             if (p.getEstado().equals("NO_LLEGADO") && p.getTiempoArribo() <= tiempoActual) {
@@ -259,7 +284,7 @@ public class Simulador {
             }
         }
     }
-
+    //El método que actualiza la cola de bloqueados, moviendo los que terminaron E/S a la cola de listos
     private void actualizarColaBloqueados() {
         List<Proceso> desbloqueados = new ArrayList<>();
         for (Proceso p : colaBloqueados) {
@@ -274,14 +299,14 @@ public class Simulador {
             }
         }
         colaBloqueados.removeAll(desbloqueados);   
-        for (Proceso p : colaBloqueados){  
-          p.setTiempoRestanteES(p.getTiempoRestanteES() - 1); //Descontamos a cada uno una unidad de tiempo    
-        }  
+        for (Proceso p : colaBloqueados){   
+            p.setTiempoRestanteES(p.getTiempoRestanteES() - 1); //Descontamos a cada uno una unidad de tiempo    
+        }   
     }
-
+    //El método que verifica si se cumplen las condiciones de fin de simulación
     private void verificarCondicionDeFin() {
-        long procesosTerminados = procesos.stream().filter(p -> p.getEstado().equals("TERMINADO")).count(); //Si todos los procesos tienen como estado "Terminado", la simulacion termina
-        if (procesosTerminados == procesos.size() && cpu.estaOciosa() && cpu.getTiempoRestanteTCP() == 0 && cpu.getTiempoRestanteTIP() == 0) { //No hay procesos en CPU ni en overhead
+        long procesosTerminados = procesos.stream().filter(p -> p.getEstado().equals("TERMINADO")).count();
+        if (procesosTerminados == procesos.size() && cpu.estaOciosa() && cpu.getTiempoRestanteTCP() == 0 && cpu.getTiempoRestanteTIP() == 0) {
             this.simulacionTerminada = true;
         }
     }
@@ -305,5 +330,5 @@ public class Simulador {
     
     public List<Evento> getLog() { return log; }
     public Metricas getMetricas() { return metricas; }
-    public List<Proceso> getProcesos() { return procesos; } //Los eventos, metricas y procesos de esta simulacion en especifico
+    public List<Proceso> getProcesos() { return procesos; }
 }

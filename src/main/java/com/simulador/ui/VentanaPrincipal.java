@@ -139,6 +139,19 @@ public class VentanaPrincipal extends JFrame {
                 int tfp = Integer.parseInt(tfpField.getText());
                 int tcp = Integer.parseInt(tcpField.getText());
                 int quantum = Integer.parseInt(quantumField.getText()); //Convertimos lo ingresado a enteros
+                
+                //Validaciones por si quieren ingresar un valor menor a 0 en los parámetros, o si quieren meter un quantum menor a 1
+                if (tip < 0 || tfp < 0 || tcp < 0) {
+                    JOptionPane.showMessageDialog(this, "Los valores para TIP, TFP y TCP no pueden ser negativos.", "Error de Entrada", JOptionPane.ERROR_MESSAGE);
+                    iniciarButton.setEnabled(true);
+                    return; // Detener la ejecución
+                }
+                if (quantum < 1) {
+                    JOptionPane.showMessageDialog(this, "El valor para Quantum debe ser como mínimo 1.", "Error de Entrada", JOptionPane.ERROR_MESSAGE);
+                    iniciarButton.setEnabled(true);
+                    return; // Detener la ejecución
+                }
+
                 SystemParams params = new SystemParams(tip, tfp, tcp, quantum);
 
                 // 2. Crear el planificador seleccionado
